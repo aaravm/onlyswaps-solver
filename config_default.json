@@ -1,0 +1,11 @@
+{
+  "networks": [{
+    "name": "furnace",
+    "chain_id": "63640",
+    "rpc_url": "https://api.furnace.dcipher.network"
+  }, {
+    "name": "base-sepolia",
+    "chain_id": "84532",
+    "rpc_url": "wss://base-sepolia.drpc.org"
+  }]
+}
