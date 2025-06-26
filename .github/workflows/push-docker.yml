@@ -39,7 +39,7 @@ jobs:
           labels: |
             maintainer=${{ env.IMAGE_MAINTAINER }}
             org.opencontainers.image.title=onlyswaps-solver
-            org.opencontainers.image.description="a distributed signing service"
+            org.opencontainers.image.description="a rust agent for performing token swaps across EVM chains"
             org.opencontainers.image.vendor=${{ env.IMAGE_VENDOR }}
           flavor: |
             latest=false
@@ -67,12 +67,12 @@ jobs:
         name: Tag Docker image and push to Google Artifact Registry
         uses: docker/build-push-action@v6
         with:
-          push: ${{ github.ref == 'refs/heads/main' }}
+          push: ${{ github.ref == 'refs/heads/master' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           context: .
           file: ./onlyswaps-solver/Dockerfile
           cache-from: |
             type=registry,ref=${{ env.DOCKER_REGISTRY }}/onlyswaps-solver-cache:${{ steps.meta.outputs.version }}
-            type=registry,ref=${{ env.DOCKER_REGISTRY }}/onlyswaps-solver-cache:main-latest
+            type=registry,ref=${{ env.DOCKER_REGISTRY }}/onlyswaps-solver-cache:master-latest
           cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/onlyswaps-solver-cache:${{ steps.meta.outputs.version }},mode=max
