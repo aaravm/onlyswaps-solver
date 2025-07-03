@@ -1,11 +1,11 @@
 {
   "networks": [{
-    "name": "furnace",
-    "chain_id": "63640",
-    "rpc_url": "https://api.furnace.dcipher.network"
+    "chain_id": 63640,
+    "rpc_url": "wss://ws.furnace.dcipher.network",
+    "order_book_address": "0xEd925F96790F11678972b0F2c250498D782DDec9"
   }, {
-    "name": "base-sepolia",
-    "chain_id": "84532",
-    "rpc_url": "wss://base-sepolia.drpc.org"
+    "chain_id": 84532,
+    "rpc_url": "wss://base-sepolia.drpc.org",
+    "order_book_address": "0xEd925F96790F11678972b0F2c250498D782DDec9"
   }]
 }

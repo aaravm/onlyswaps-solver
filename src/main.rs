@@ -1,5 +1,9 @@
-use alloy::network::EthereumWallet;
-use alloy::primitives::U256;
+mod db;
+mod faucet;
+
+use std::error::Error;
+use crate::db::InMemoryDatabase;
+use alloy::network::{Ethereum, EthereumWallet};
 use alloy::providers::{Provider, ProviderBuilder, WsConnect};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::sol;
@@ -7,10 +11,19 @@ use axum::Router;
 use axum::routing::get;
 use clap::Parser;
 use eyre::eyre;
+use omnievent::event_manager::EventManager;
+use omnievent::grpc::OmniEventServiceImpl;
+use omnievent::proto_types::RegisterNewEventRequest;
+use omnievent::proto_types::omni_event_service_client::OmniEventServiceClient;
+use omnievent::proto_types::omni_event_service_server::OmniEventServiceServer;
 use serde::Deserialize;
 use shellexpand::tilde;
 use std::fs;
 use std::str::FromStr;
+use std::sync::Arc;
+use alloy::primitives::Address;
+use bytes::Bytes;
+use superalloy::provider::MultiProvider;
 use tokio::net::TcpListener;
 
 #[derive(Parser, Debug)]
@@ -30,16 +43,16 @@ struct CliArgs {
     port: u16,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct ConfigFile {
     networks: Vec<NetworkConfig>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct NetworkConfig {
-    chain_id: String,
-    name: String,
+    chain_id: u64,
     rpc_url: String,
+    order_book_address: String,
 }
 
 sol!(
@@ -60,28 +73,59 @@ async fn main() -> eyre::Result<()> {
         return Err(eyre!("no networks configured"));
     }
 
-    let network = config.networks.get(0).expect("should be impossibru");
     let signer = PrivateKeySigner::from_str(&cli.private_key)?;
-    let our_address = signer.address();
-    println!("using address {} for chain {}", our_address, &network.name);
+    let wallet = EthereumWallet::new(signer);
+    let mut multi_provider = MultiProvider::empty();
 
-    let provider = create_provider(&network.rpc_url, PrivateKeySigner::from_str(&cli.private_key)?).await?;
-    let rusd_token_contract = ERC20FaucetToken::new("0xb1F323844dcfde76710fC801F33D4E24d7201B84".parse()?, provider);
-
-    let rusd_balance = rusd_token_contract.balanceOf(our_address).call().await?;
-    if rusd_balance == U256::from(0) {
-        println!("withdrawing some tokens");
-        let tx = rusd_token_contract.mint().send().await?;
-        let receipt = tx.get_receipt().await?;
-        println!("withdrew tokens: {}", receipt.transaction_hash);
-    } else {
-        println!("balance {} - not withdrawing tokens", rusd_balance);
+    for network in config.networks.iter().cloned() {
+        let url = network.rpc_url.clone();
+        let chainid = network.chain_id.clone();
+        let provider = ProviderBuilder::new()
+            .with_gas_estimation()
+            .wallet(wallet.clone())
+            .connect_ws(WsConnect::new(url))
+            .await?
+            .erased();
+        multi_provider.extend::<Ethereum>([(chainid, provider)]);
     }
+    println!("{} chain(s) have been configured", config.networks.len());
+
+    let db = InMemoryDatabase::default();
+    let mut event_manager = EventManager::new(Arc::new(multi_provider), db);
+    event_manager.start();
+    let omnievent = Arc::new(OmniEventServiceImpl::new(Arc::new(event_manager)));
+
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let mut client = OmniEventServiceClient::connect("http://127.0.0.1:8089").await.unwrap();
+        for network in config.networks.iter().cloned() {
+            let chain_id = network.chain_id;
+            let orderbook_address = Address::from_str(network.order_book_address.clone().as_ref()).unwrap();
+            let registration = client
+                .register_event(RegisterNewEventRequest {
+                    chain_id,
+                    address: Bytes::from(orderbook_address.to_vec()).into(),
+                    event_name: "SwapRequested".into(),
+                    fields: vec![omnievent::proto_types::EventField {
+                        sol_type: "uint256".into(),
+                        indexed: false,
+                    }],
+                    block_safety: Default::default(),
+                })
+                .await;
+            if let Err(e) = registration {
+                eprintln!("failed to register event for chain {}: {}", chain_id, e);
+            }
+        }
+    });
+
+    let blockchain_plugin_socket = "127.0.0.1:8089".parse()?;
+    let blockchain_plugin =
+        tonic::transport::Server::builder().add_service(OmniEventServiceServer::from_arc(Arc::clone(&omnievent)));
 
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
 
-    println!("{} chain(s) have been configured", config.networks.len());
     println!("Listening on port {}", cli.port);
     tokio::select! {
         _ = sigterm.recv() => {
@@ -97,6 +141,13 @@ async fn main() -> eyre::Result<()> {
         _ = tokio::signal::ctrl_c() => {
             println!("received ctrl+c, shutting down...");
             Ok(())
+        },
+
+        res = blockchain_plugin.serve(blockchain_plugin_socket) => {
+            match res {
+                Ok(_) => Err(eyre!("blockchain event listener stopped unexpectedly")),
+                Err(e) => Err(eyre!("blockchain event listener stopped unexpectedly: {}", e))
+            }
         },
 
         res = axum::serve(listener, app) => {
@@ -122,15 +173,4 @@ fn load_config_file(cli: &CliArgs) -> ConfigFile {
 
 async fn healthcheck_handler() -> &'static str {
     "ok"
-}
-
-async fn create_provider(rpc_url: &str, signer: PrivateKeySigner) -> eyre::Result<Box<impl Provider>> {
-    let base = ProviderBuilder::new().wallet(EthereumWallet::from(signer));
-    if rpc_url.starts_with("http") {
-        Ok(Box::new(base.connect_http(rpc_url.parse()?)))
-    } else if rpc_url.starts_with("ws") {
-        Ok(Box::new(base.connect_ws(WsConnect::new(rpc_url)).await?))
-    } else {
-        Err(eyre!("RPC URL {} is not http or ws", rpc_url))
-    }
 }
