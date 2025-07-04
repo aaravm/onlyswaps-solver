@@ -1,30 +1,22 @@
 mod db;
+mod events;
 mod faucet;
+mod plugin;
+mod provider;
 
-use crate::db::InMemoryDatabase;
-use alloy::network::{Ethereum, EthereumWallet};
-use alloy::primitives::Address;
-use alloy::providers::{Provider, ProviderBuilder, WsConnect};
-use alloy::signers::local::PrivateKeySigner;
+use crate::events::{EventListener, create_omnievent_plugin};
+use crate::plugin::PluginServer;
+use crate::provider::create_multiprovider;
 use alloy::sol;
 use axum::Router;
 use axum::routing::get;
-use bytes::Bytes;
 use clap::Parser;
 use eyre::eyre;
-use omnievent::event_manager::EventManager;
-use omnievent::grpc::OmniEventServiceImpl;
-use omnievent::proto_types::omni_event_service_client::OmniEventServiceClient;
-use omnievent::proto_types::omni_event_service_server::OmniEventServiceServer;
-use omnievent::proto_types::{RegisterNewEventRequest, StreamEventsRequest};
 use serde::Deserialize;
 use shellexpand::tilde;
 use std::fs;
-use std::str::FromStr;
 use std::sync::Arc;
-use superalloy::provider::MultiProvider;
 use tokio::net::TcpListener;
-use tonic::codegen::tokio_stream::StreamExt;
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -69,90 +61,38 @@ async fn main() -> eyre::Result<()> {
     let app = Router::new().route("/health", get(healthcheck_handler));
     let listener = TcpListener::bind(("0.0.0.0", cli.port)).await?;
 
-    if config.networks.is_empty() {
-        return Err(eyre!("no networks configured"));
-    }
+    let provider = create_multiprovider(&cli.private_key, &config.networks).await?;
+    let omnievent_plugin = create_omnievent_plugin(Arc::new(provider))?;
 
-    let signer = PrivateKeySigner::from_str(&cli.private_key)?;
-    let wallet = EthereumWallet::new(signer);
-    let mut multi_provider = MultiProvider::empty();
-
-    for network in config.networks.iter().cloned() {
-        let url = network.rpc_url.clone();
-        let chainid = network.chain_id.clone();
-        let provider = ProviderBuilder::new()
-            .with_gas_estimation()
-            .wallet(wallet.clone())
-            .connect_ws(WsConnect::new(url))
-            .await?
-            .erased();
-        multi_provider.extend::<Ethereum>([(chainid, provider)]);
-    }
-    println!("{} chain(s) have been configured", config.networks.len());
-
-    let db = InMemoryDatabase::default();
-    let mut event_manager = EventManager::new(Arc::new(multi_provider), db);
-    event_manager.start();
-    let omnievent = Arc::new(OmniEventServiceImpl::new(Arc::new(event_manager)));
-
-    tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        let mut client = OmniEventServiceClient::connect("http://127.0.0.1:8089").await.unwrap();
-        let mut event_ids = Vec::new();
-        for network in config.networks.iter().cloned() {
-            let chain_id = network.chain_id;
-            let orderbook_address = Address::from_str(network.order_book_address.clone().as_ref()).unwrap();
-            let event_registration = client
-                .register_event(RegisterNewEventRequest {
-                    chain_id,
-                    address: Bytes::from(orderbook_address.to_vec()).into(),
-                    event_name: "RandomnessRequested".into(),
-                    fields: vec![
-                        omnievent::proto_types::EventField {
-                            sol_type: "uint256".into(),
-                            indexed: true,
-                        },
-                        omnievent::proto_types::EventField {
-                            sol_type: "uint256".into(),
-                            indexed: true,
-                        },
-                        omnievent::proto_types::EventField {
-                            sol_type: "address".into(),
-                            indexed: true,
-                        },
-                        omnievent::proto_types::EventField {
-                            sol_type: "uint256".into(),
-                            indexed: false,
-                        },
-                    ],
-                    block_safety: Default::default(),
-                })
-                .await
-                .unwrap();
-
-            let (_, response, _) = event_registration.into_parts();
-            event_ids.push(response.uuid);
-        }
-
-        let (_, mut stream, _) = client
-            .stream_events(StreamEventsRequest { event_uuids: event_ids })
-            .await
-            .unwrap()
-            .into_parts();
-        while let Ok(event) = stream.next().await.unwrap() {
-            println!("{:?}", event.event_uuid)
-        }
-    });
-
-    let blockchain_plugin_socket = "127.0.0.1:8089".parse()?;
-    let blockchain_plugin =
-        tonic::transport::Server::builder().add_service(OmniEventServiceServer::from_arc(Arc::clone(&omnievent)));
-
+    let plugin_port: u16 = 8089;
+    let mut event_listener = EventListener::new(plugin_port)?;
+    let plugin_server = PluginServer::new(vec![omnievent_plugin], plugin_port);
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
 
     println!("Listening on port {}", cli.port);
     tokio::select! {
+        res = plugin_server.start() => {
+            match res {
+                Ok(_) => Err(eyre!("plugin server stopped unexpectedly")),
+                Err(e) => Err(eyre!("plugin server stopped unexpectedly: {}", e))
+            }
+        },
+
+        res = event_listener.stream(&config.networks) => {
+            match res {
+                Ok(_) => Err(eyre!("event listener stopped unexpectedly")),
+                Err(e) => Err(eyre!("event listener stopped unexpectedly: {}", e))
+            }
+        }
+
+        res = axum::serve(listener, app) => {
+            match res {
+                Ok(_) => Err(eyre!("http server stopped unexpectedly")),
+                Err(e) => Err(eyre!("http server stopped unexpectedly: {}", e))
+            }
+        }
+        
         _ = sigterm.recv() => {
             println!("received SIGTERM, shutting down...");
             Ok(())
@@ -167,20 +107,6 @@ async fn main() -> eyre::Result<()> {
             println!("received ctrl+c, shutting down...");
             Ok(())
         },
-
-        res = blockchain_plugin.serve(blockchain_plugin_socket) => {
-            match res {
-                Ok(_) => Err(eyre!("blockchain event listener stopped unexpectedly")),
-                Err(e) => Err(eyre!("blockchain event listener stopped unexpectedly: {}", e))
-            }
-        },
-
-        res = axum::serve(listener, app) => {
-            match res {
-                Ok(_) => Err(eyre!("http server stopped unexpectedly")),
-                Err(e) => Err(eyre!("http server stopped unexpectedly: {}", e))
-            }
-        }
     }
 }
 
