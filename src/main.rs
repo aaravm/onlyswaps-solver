@@ -1,30 +1,30 @@
 mod db;
 mod faucet;
 
-use std::error::Error;
 use crate::db::InMemoryDatabase;
 use alloy::network::{Ethereum, EthereumWallet};
+use alloy::primitives::Address;
 use alloy::providers::{Provider, ProviderBuilder, WsConnect};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::sol;
 use axum::Router;
 use axum::routing::get;
+use bytes::Bytes;
 use clap::Parser;
 use eyre::eyre;
 use omnievent::event_manager::EventManager;
 use omnievent::grpc::OmniEventServiceImpl;
-use omnievent::proto_types::RegisterNewEventRequest;
 use omnievent::proto_types::omni_event_service_client::OmniEventServiceClient;
 use omnievent::proto_types::omni_event_service_server::OmniEventServiceServer;
+use omnievent::proto_types::{RegisterNewEventRequest, StreamEventsRequest};
 use serde::Deserialize;
 use shellexpand::tilde;
 use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
-use alloy::primitives::Address;
-use bytes::Bytes;
 use superalloy::provider::MultiProvider;
 use tokio::net::TcpListener;
+use tonic::codegen::tokio_stream::StreamExt;
 
 #[derive(Parser, Debug)]
 struct CliArgs {
@@ -98,24 +98,49 @@ async fn main() -> eyre::Result<()> {
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let mut client = OmniEventServiceClient::connect("http://127.0.0.1:8089").await.unwrap();
+        let mut event_ids = Vec::new();
         for network in config.networks.iter().cloned() {
             let chain_id = network.chain_id;
             let orderbook_address = Address::from_str(network.order_book_address.clone().as_ref()).unwrap();
-            let registration = client
+            let event_registration = client
                 .register_event(RegisterNewEventRequest {
                     chain_id,
                     address: Bytes::from(orderbook_address.to_vec()).into(),
-                    event_name: "SwapRequested".into(),
-                    fields: vec![omnievent::proto_types::EventField {
-                        sol_type: "uint256".into(),
-                        indexed: false,
-                    }],
+                    event_name: "RandomnessRequested".into(),
+                    fields: vec![
+                        omnievent::proto_types::EventField {
+                            sol_type: "uint256".into(),
+                            indexed: true,
+                        },
+                        omnievent::proto_types::EventField {
+                            sol_type: "uint256".into(),
+                            indexed: true,
+                        },
+                        omnievent::proto_types::EventField {
+                            sol_type: "address".into(),
+                            indexed: true,
+                        },
+                        omnievent::proto_types::EventField {
+                            sol_type: "uint256".into(),
+                            indexed: false,
+                        },
+                    ],
                     block_safety: Default::default(),
                 })
-                .await;
-            if let Err(e) = registration {
-                eprintln!("failed to register event for chain {}: {}", chain_id, e);
-            }
+                .await
+                .unwrap();
+
+            let (_, response, _) = event_registration.into_parts();
+            event_ids.push(response.uuid);
+        }
+
+        let (_, mut stream, _) = client
+            .stream_events(StreamEventsRequest { event_uuids: event_ids })
+            .await
+            .unwrap()
+            .into_parts();
+        while let Ok(event) = stream.next().await.unwrap() {
+            println!("{:?}", event.event_uuid)
         }
     });
 
