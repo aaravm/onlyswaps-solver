@@ -4,13 +4,13 @@ use alloy::providers::{Provider, ProviderBuilder, WsConnect};
 use alloy::signers::local::PrivateKeySigner;
 use eyre::eyre;
 use superalloy::provider::MultiProvider;
-use crate::NetworkConfig;
+use crate::config::NetworkConfig;
 
 pub(crate) async fn create_multiprovider(private_key: &str, networks: &Vec<NetworkConfig>) -> eyre::Result<MultiProvider<u64>>{
     if networks.is_empty() {
         return Err(eyre!("no networks configured"));
     }
-    
+
     let signer = PrivateKeySigner::from_str(private_key)?;
     let wallet = EthereumWallet::new(signer);
     let mut multi_provider = MultiProvider::empty();
@@ -26,7 +26,7 @@ pub(crate) async fn create_multiprovider(private_key: &str, networks: &Vec<Netwo
             .erased();
         multi_provider.extend::<Ethereum>([(chainid, provider)]);
     }
-    
+
     println!("{} chain(s) have been configured", networks.len());
 
     Ok(multi_provider)

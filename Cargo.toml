@@ -19,3 +19,4 @@ thiserror = "2.0.12"
 tonic = "0.13.1"
 uuid = { version = "1.17.0", features = ["v4"] }
 bytes = "1.10.1"
+dotenv = "0.15.0"

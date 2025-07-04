@@ -1,4 +1,3 @@
-use crate::NetworkConfig;
 use crate::db::InMemoryDatabase;
 use alloy::primitives::Address;
 use bytes::Bytes;
@@ -11,6 +10,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use superalloy::provider::MultiProvider;
 use tonic::codegen::tokio_stream::StreamExt;
+use crate::config::NetworkConfig;
 
 type OmniEventPlugin = OmniEventServiceServer<OmniEventServiceImpl<Arc<MultiProvider<u64>>, InMemoryDatabase>>;
 pub(crate) fn create_omnievent_plugin(provider: Arc<MultiProvider<u64>>) -> eyre::Result<OmniEventPlugin> {
@@ -22,11 +22,11 @@ pub(crate) fn create_omnievent_plugin(provider: Arc<MultiProvider<u64>>) -> eyre
     Ok(OmniEventServiceServer::from_arc(Arc::clone(&omnievent)))
 }
 
-pub(crate) struct EventListener {
+pub(crate) struct PluginHandler {
     client: OmniEventServiceClient<tonic::transport::channel::Channel>,
 }
 
-impl EventListener {
+impl PluginHandler {
     pub fn new(port: u16) -> eyre::Result<Self> {
         let url = format!("http://127.0.0.1:{}", port);
         let channel = tonic::transport::Endpoint::new(url)?.connect_lazy();
@@ -38,7 +38,7 @@ impl EventListener {
         let mut event_ids = Vec::new();
         for network in networks.iter().cloned() {
             let chain_id = network.chain_id;
-            let contract_addr = Bytes::from(Address::from_str(&network.order_book_address.clone())?.0.to_vec());
+            let contract_addr = Bytes::from(Address::from_str(&network.router_address.clone())?.0.to_vec());
             let event_specification = RegisterNewEventRequest {
                 chain_id,
                 address: contract_addr,

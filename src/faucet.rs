@@ -1,35 +1,37 @@
-use crate::ERC20FaucetToken;
-use alloy::primitives::U256;
-use alloy::providers::Provider;
-use alloy::signers::Signer;
-use crate::ERC20FaucetToken::ERC20FaucetTokenInstance;
+use crate::config::NetworkConfig;
+use crate::eth::ERC20Token;
+use alloy::primitives::{Address, U256};
+use alloy::signers::local::PrivateKeySigner;
+use eyre::eyre;
+use std::str::FromStr;
+use superalloy::provider::{MultiChainProvider, MultiProvider};
 
-struct Faucet<S, P: Provider> {
-    contract: ERC20FaucetTokenInstance<P>,
-    signer: S,
+pub(crate) async fn fund_wallets(networks: &Vec<NetworkConfig>, multi_provider: &MultiProvider<u64>, private_key: &str) -> eyre::Result<()> {
+    let sk = PrivateKeySigner::from_str(private_key)?;
+    let our_address = sk.address();
+    for network in networks {
+        withdraw_funds(multi_provider, our_address, &network).await?;
+    }
+    Ok(())
 }
 
-impl<S: Signer, P: Provider> Faucet<S, P> {
-    fn new(token_address: String, signer: S, provider: P) -> eyre::Result<Self> {
-        let contract =
-            ERC20FaucetToken::new(token_address.parse()?, provider);
-        Ok(Self {
-            contract,
-            signer,
-        })
-    }
-    async fn withdraw(&self) -> eyre::Result<()> {
-        let our_address = self.signer.address();
+async fn withdraw_funds(multi_provider: &MultiProvider<u64>, our_address: Address, network: &NetworkConfig) -> eyre::Result<()> {
+    println!("checking funds for {}", network.chain_id);
 
-        let rusd_balance = self.contract.balanceOf(our_address).call().await?;
-        if rusd_balance == U256::from(0) {
-            println!("withdrawing some tokens");
-            let tx = self.contract.mint().send().await?;
-            let receipt = tx.get_receipt().await?;
-            println!("withdrew tokens: {}", receipt.transaction_hash);
-        } else {
-            println!("balance {} - not withdrawing tokens", rusd_balance);
-        }
-        Ok(())
+    let provider = multi_provider.get_ethereum_provider(&network.chain_id).ok_or(eyre!("No provider for network"))?;
+    let rusd_address = network.rusd_address.parse()?;
+    println!("contract address is {}", &rusd_address);
+    let contract = ERC20Token::new(rusd_address, provider);
+
+    let rusd_balance = contract.balanceOf(our_address).call().await?;
+    if rusd_balance > U256::from(0) {
+        println!("balance {} - not withdrawing tokens for chain_id {}", rusd_balance, &network.chain_id);
+        return Ok(());
     }
+
+    println!("withdrawing some tokens to address {}", our_address);
+    let tx = contract.mint(our_address, U256::from(1000)).send().await?;
+    tx.get_receipt().await?;
+    println!("withdrew tokens for chain_id {}", &network.chain_id);
+    Ok(())
 }
