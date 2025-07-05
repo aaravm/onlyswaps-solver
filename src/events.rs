@@ -1,16 +1,18 @@
 use crate::db::InMemoryDatabase;
 use alloy::primitives::Address;
-use bytes::Bytes;
 use omnievent::event_manager::EventManager;
 use omnievent::grpc::OmniEventServiceImpl;
-use omnievent::proto_types::{RegisterNewEventRequest, StreamEventsRequest};
+use omnievent::proto_types::StreamEventsRequest;
 use omnievent::proto_types::omni_event_service_client::OmniEventServiceClient;
 use omnievent::proto_types::omni_event_service_server::OmniEventServiceServer;
 use std::str::FromStr;
 use std::sync::Arc;
+use eyre::eyre;
+use itertools::Itertools;
 use superalloy::provider::MultiProvider;
 use tonic::codegen::tokio_stream::StreamExt;
 use crate::config::NetworkConfig;
+use crate::handler::{BridgeDepositHandler, EventHandler};
 
 type OmniEventPlugin = OmniEventServiceServer<OmniEventServiceImpl<Arc<MultiProvider<u64>>, InMemoryDatabase>>;
 pub(crate) fn create_omnievent_plugin(provider: Arc<MultiProvider<u64>>) -> eyre::Result<OmniEventPlugin> {
@@ -35,47 +37,30 @@ impl PluginHandler {
     }
 
     pub async fn stream(&mut self, networks: &Vec<NetworkConfig>) -> eyre::Result<()> {
-        let mut event_ids = Vec::new();
+        let mut handlers = Vec::new();
         for network in networks.iter().cloned() {
             let chain_id = network.chain_id;
-            let contract_addr = Bytes::from(Address::from_str(&network.router_address.clone())?.0.to_vec());
-            let event_specification = RegisterNewEventRequest {
-                chain_id,
-                address: contract_addr,
-                event_name: "RandomnessRequested".into(),
-                fields: vec![
-                    omnievent::proto_types::EventField {
-                        sol_type: "uint256".into(),
-                        indexed: true,
-                    },
-                    omnievent::proto_types::EventField {
-                        sol_type: "uint256".into(),
-                        indexed: true,
-                    },
-                    omnievent::proto_types::EventField {
-                        sol_type: "address".into(),
-                        indexed: true,
-                    },
-                    omnievent::proto_types::EventField {
-                        sol_type: "uint256".into(),
-                        indexed: false,
-                    },
-                ],
-                block_safety: Default::default(),
-            };
-            let response = self.client.register_event(event_specification).await?;
-            let (_, registered_event, _) = response.into_parts();
-            event_ids.push(registered_event.uuid); 
-            
+            let router_addr = Address::from_str(&network.router_address.clone())?;
+            let mut handler = BridgeDepositHandler::new(chain_id, router_addr);
+            handler.register(&mut self.client).await?;
+            handlers.push(handler);
         }
+        let event_ids = handlers.iter()
+            .map(|it| it.events.clone())
+            .flatten()
+            .collect_vec();
 
         let (_, mut stream, _) = self.client
             .stream_events(StreamEventsRequest { event_uuids: event_ids })
             .await?
             .into_parts();
+        
         while let Ok(event) = stream.next().await.unwrap() {
-            println!("{:?}", event.event_uuid)
+            for handler in &handlers {
+                handler.handle(&event).await?
+            }
         }
-        Ok(())
+        
+        Err(eyre!("event stream stopped unexpectedly!"))
     }
 }

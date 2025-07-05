@@ -6,6 +6,7 @@ mod provider;
 mod api;
 mod eth;
 mod config;
+mod handler;
 
 use crate::events::{PluginHandler, create_omnievent_plugin};
 use crate::plugin::PluginServer;

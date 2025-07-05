@@ -20,7 +20,7 @@ async fn withdraw_funds(multi_provider: &MultiProvider<u64>, our_address: Addres
 
     let provider = multi_provider.get_ethereum_provider(&network.chain_id).ok_or(eyre!("No provider for network"))?;
     let rusd_address = network.rusd_address.parse()?;
-    println!("contract address is {}", &rusd_address);
+    println!("rusd contract address is {}", &rusd_address);
     let contract = ERC20Token::new(rusd_address, provider);
 
     let rusd_balance = contract.balanceOf(our_address).call().await?;
