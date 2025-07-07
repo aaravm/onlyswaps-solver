@@ -36,12 +36,12 @@ impl PluginHandler {
         Ok(Self { client })
     }
 
-    pub async fn stream(&mut self, networks: &Vec<NetworkConfig>) -> eyre::Result<()> {
+    pub async fn stream(&mut self, networks: &Vec<NetworkConfig>, multi_provider: Arc<MultiProvider<u64>>) -> eyre::Result<()> {
         let mut handlers = Vec::new();
         for network in networks.iter().cloned() {
             let chain_id = network.chain_id;
             let router_addr = Address::from_str(&network.router_address.clone())?;
-            let mut handler = BridgeDepositHandler::new(chain_id, router_addr);
+            let mut handler = BridgeDepositHandler::new(chain_id, router_addr, multi_provider.clone())?;
             handler.register(&mut self.client).await?;
             handlers.push(handler);
         }

@@ -31,7 +31,8 @@ async fn main() -> eyre::Result<()> {
     
     // connect grpc for event listening plugins
     let plugin_port: u16 = 8089;
-    let omnievent_plugin = create_omnievent_plugin(Arc::new(provider))?;
+    let p = Arc::new(provider);
+    let omnievent_plugin = create_omnievent_plugin(p.clone())?;
     let plugin_server = PluginServer::new(vec![omnievent_plugin], plugin_port);
     let mut plugin_handler = PluginHandler::new(plugin_port)?;
     
@@ -39,6 +40,7 @@ async fn main() -> eyre::Result<()> {
     let api_server = ApiServer::new(cli.port);
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+    
 
     // listen for alllll the things!
     tokio::select! {
@@ -49,7 +51,7 @@ async fn main() -> eyre::Result<()> {
             }
         },
 
-        res = plugin_handler.stream(&config.networks) => {
+        res = plugin_handler.stream(&config.networks, p) => {
             match res {
                 Ok(_) => Err(eyre!("event listener stopped unexpectedly")),
                 Err(e) => Err(eyre!("event listener stopped unexpectedly: {}", e))
