@@ -44,5 +44,5 @@ RUN apt-get update && \
 WORKDIR /app
 COPY --from=builder /app/target/release/onlyswaps-solver /usr/local/bin
 # probably want to use a real config :)
-COPY ./config_default.json /app/config.json
+COPY config-default.json /app/config.json
 ENTRYPOINT ["/usr/local/bin/onlyswaps-solver", "--config-path", "/app/config.json"]
