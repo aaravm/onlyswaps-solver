@@ -1,17 +1,15 @@
 {
   "networks": [
     {
-      "chain_id": 63640,
-      "rpc_url": "wss://ws.furnace.dcipher.network",
-      "rusd_address": "0x73e04901b3fa84b5bd6782d446751e91c4e2616c",
-      "bridge_address": "0xc9a956345d9d6e5729ddd934d7b9cfd8cdce353e",
-      "router_address": "0xd81DCC29f1B8EED20a5Bf18cA0875115d121Dffd"
-    },
-    {
       "chain_id": 84532,
       "rpc_url": "wss://base-sepolia.drpc.org",
       "rusd_address": "0x73e04901b3fa84b5bd6782d446751e91c4e2616c",
-      "bridge_address": "0xc9a956345d9d6e5729ddd934d7b9cfd8cdce353e",
+      "router_address": "0xd81DCC29f1B8EED20a5Bf18cA0875115d121Dffd"
+    },
+    {
+      "chain_id": 43114,
+      "rpc_url": "wss://avalanche-c-chain-rpc.publicnode.com",
+      "rusd_address": "0x73e04901b3fa84b5bd6782d446751e91c4e2616c",
       "router_address": "0xd81DCC29f1B8EED20a5Bf18cA0875115d121Dffd"
     }
   ]

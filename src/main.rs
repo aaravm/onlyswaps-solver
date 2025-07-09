@@ -38,7 +38,6 @@ async fn main() -> eyre::Result<()> {
         let chain = Chain::new(&provider, &ChainConfig {
             chain_id: n.chain_id,
             our_address,
-            bridge_addr: Address::from_str(&n.bridge_address)?,
             router_addr: Address::from_str(&n.router_address)?,
             token_addr: Address::from_str(&n.rusd_address)?,
         })?;

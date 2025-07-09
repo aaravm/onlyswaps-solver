@@ -1,6 +1,5 @@
-use crate::eth::Bridge::{BridgeErrors, BridgeInstance};
 use crate::eth::ERC20Token::{ERC20TokenErrors, ERC20TokenInstance};
-use crate::eth::Router::RouterInstance;
+use crate::eth::Router::{RouterErrors, RouterInstance};
 use crate::events::BridgeDepositEvent;
 use alloy::hex;
 use alloy::network::Ethereum;
@@ -12,7 +11,6 @@ pub(crate) struct Chain {
     pub chain_id: U256,
     provider: DynProvider,
     our_address: Address,
-    bridge: BridgeInstance<DynProvider, Ethereum>,
     pub router: RouterInstance<DynProvider, Ethereum>,
     token: ERC20TokenInstance<DynProvider, Ethereum>,
 }
@@ -20,7 +18,6 @@ pub(crate) struct Chain {
 pub(crate) struct ChainConfig {
     pub chain_id: u64,
     pub our_address: Address,
-    pub bridge_addr: Address,
     pub router_addr: Address,
     pub token_addr: Address,
 }
@@ -32,7 +29,7 @@ pub(crate) struct Transfer {
     pub src_chain_id: U256,
     pub dest_chain_id: U256,
     pub recipient: Address,
-    pub bridge_fee: U256,
+    pub swap_fee: U256,
     pub solver_fee: U256,
     pub nonce: U256,
     pub fulfilled: bool,
@@ -44,14 +41,12 @@ impl Chain {
             .get_ethereum_provider(&config.chain_id)
             .ok_or(eyre::eyre!("No provider for chain {}", config.chain_id))?
             .clone();
-        let bridge = BridgeInstance::new(config.bridge_addr, provider.clone());
         let router = RouterInstance::new(config.router_addr, provider.clone());
         let token = ERC20TokenInstance::new(config.token_addr, provider.clone());
         Ok(Chain {
             chain_id: U256::from(config.chain_id),
             our_address: config.our_address,
             provider,
-            bridge,
             router,
             token,
         })
@@ -67,7 +62,7 @@ impl Chain {
             src_chain_id: transfer.srcChainId,
             dest_chain_id: transfer.dstChainId,
             recipient: transfer.recipient,
-            bridge_fee: transfer.bridgeFee,
+            swap_fee: transfer.swapFee,
             solver_fee: transfer.solverFee,
             nonce: transfer.nonce,
             fulfilled: transfer.executed,
@@ -99,10 +94,10 @@ impl Chain {
             return Ok(());
         }
 
-        let approval = self.token.approve(*self.bridge.address(), transfer.amount).send().await?;
+        let approval = self.token.approve(*self.router.address(), transfer.amount).send().await?;
         approval.get_receipt().await?;
         match self
-            .bridge
+            .router
             .relayTokens(
                 *self.token.address(),
                 transfer.recipient,
@@ -119,14 +114,14 @@ impl Chain {
                 Ok(())
             }
             Err(e) => {
-                if let Some(err) = e.as_decoded_interface_error::<BridgeErrors>() {
+                if let Some(err) = e.as_decoded_interface_error::<RouterErrors>() {
                     match err {
-                        BridgeErrors::AlreadyFulfilled(_) => {
+                        RouterErrors::AlreadyFulfilled(_) => {
                             println!("request already fulfilled");
                             return Ok(());
                         }
-                        BridgeErrors::ZeroAmount(_) => eyre::bail!("request zero amount - something went very wrong"),
-                        BridgeErrors::InvalidTokenOrRecipient(_) => eyre::bail!("invalid token or recipient"),
+                        RouterErrors::ZeroAmount(_) => eyre::bail!("request zero amount - something went very wrong"),
+                        RouterErrors::InvalidTokenOrRecipient(_) => eyre::bail!("invalid token or recipient"),
                         _ => eyre::bail!("failed to decode error"),
                     }
                 }

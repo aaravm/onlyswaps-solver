@@ -3,13 +3,12 @@
     "chain_id": 1337,
     "rpc_url": "ws://localhost:1337",
     "rusd_address": "0x43748DC0b4735463105c528816f59bB7F37009dE",
-    "bridge_address": "0x213d4D15923ed5571B81530226673bf12b7e66e8",
-    "router_address": "0xE91fB8BBfb1C6beFC2383cDFd5E502BCA14f03a9"
+    "router_address": "0xc689B582dbcB667eB185600A78D6B808359b3D96"
   }, {
     "chain_id": 1338,
     "rpc_url": "ws://localhost:1338",
     "rusd_address": "0x43748DC0b4735463105c528816f59bB7F37009dE",
-    "bridge_address": "0x213d4D15923ed5571B81530226673bf12b7e66e8",
-    "router_address": "0xE91fB8BBfb1C6beFC2383cDFd5E502BCA14f03a9"
+    "router_address": "0xc689B582dbcB667eB185600A78D6B808359b3D96"
   }]
 }
+

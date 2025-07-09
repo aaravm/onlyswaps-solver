@@ -30,7 +30,6 @@ pub(crate) struct NetworkConfig {
     pub chain_id: u64,
     pub rpc_url: String,
     pub rusd_address: String,
-    pub bridge_address: String,
     pub router_address: String,
 }
 

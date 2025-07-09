@@ -11,9 +11,3 @@ sol!(
     Router,
     "onlysubs-solidity/out/Router.sol/Router.json",
 );
-
-sol!(
-    #[sol(rpc)]
-    Bridge,
-    "onlysubs-solidity/out/Bridge.sol/Bridge.json",
-);
