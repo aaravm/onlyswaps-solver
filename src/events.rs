@@ -40,7 +40,7 @@ impl PluginHandler {
     pub async fn stream(&mut self, networks: &HashMap<U256, Chain>) -> eyre::Result<()> {
         // we need to make sure the event plugin has started first... ugly
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        
+
         let mut uuid_to_chain_id = HashMap::new();
         for chain in networks.values() {
             let swap_requested_event = create_swap_requested_event(chain.chain_id, chain.router.address());
@@ -99,8 +99,9 @@ impl TryFrom<&EventOccurrence> for BridgeDepositEvent {
 }
 
 fn create_swap_requested_event(chain_id: U256, router_address: &Address) -> RegisterNewEventRequest {
+    let probably_always_valid_chain_id = chain_id.as_limbs()[0];
     RegisterNewEventRequest {
-        chain_id: chain_id.as_limbs()[0],
+        chain_id: probably_always_valid_chain_id,
         address: Bytes::from(router_address.0.to_vec()),
         event_name: "SwapRequested".into(),
         fields: vec![

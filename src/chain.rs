@@ -22,6 +22,7 @@ pub(crate) struct ChainConfig {
     pub token_addr: Address,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Transfer {
     pub request_id: FixedBytes<32>,
     pub token: Address,
@@ -110,7 +111,7 @@ impl Chain {
         {
             Ok(pending) => {
                 let rx = pending.get_receipt().await?;
-                println!("transfer of {} made: {}", transfer.amount, rx.transaction_hash);
+                println!("transfer of {} made on chain {}: {}", transfer.amount, transfer.dest_chain_id, rx.transaction_hash);
                 Ok(())
             }
             Err(e) => {
@@ -129,7 +130,7 @@ impl Chain {
                     match err {
                         ERC20TokenErrors::ERC20InsufficientAllowance(_) => eyre::bail!("for some strange reason our allowance didn't go through before making the transfer"),
                         ERC20TokenErrors::ERC20InsufficientBalance(_) => {
-                            println!("insufficient balance for token transfer - ignoring");
+                            println!("insufficient balance for token transfer of {} - ignoring", transfer.amount);
                             return Ok(());
                         }
                         _ => eyre::bail!("failed to decode error"),
@@ -143,17 +144,14 @@ impl Chain {
     pub async fn withdraw_tokens(&self) -> eyre::Result<()> {
         println!("checking funds for {}", self.chain_id);
 
-        let rusd_address = self.token.address();
-        println!("rusd contract address is {}", &rusd_address);
-
+        let min_balance = U256::from(1_000_000_000);
         let rusd_balance = self.token.balanceOf(self.our_address).call().await?;
-        if rusd_balance > U256::from(0) {
+        if rusd_balance > min_balance {
             println!("balance {} - not withdrawing tokens for chain_id {}", rusd_balance, &self.chain_id);
             return Ok(());
         }
 
-        println!("withdrawing some tokens to address {}", self.our_address);
-        let tx = self.token.mint(self.our_address, U256::from(1000)).send().await?;
+        let tx = self.token.mint(self.our_address, min_balance).send().await?;
         tx.get_receipt().await?;
         println!("withdrew tokens for chain_id {}", &self.chain_id);
         Ok(())

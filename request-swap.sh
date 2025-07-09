@@ -13,7 +13,7 @@ ME=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 OTHER_CHAIN_ID=$2
 
 RUSD=0x43748DC0b4735463105c528816f59bB7F37009dE
-ROUTER=0xE91fB8BBfb1C6beFC2383cDFd5E502BCA14f03a9
+ROUTER=0xc689B582dbcB667eB185600A78D6B808359b3D96
 
 # mint some tokens on this chain
 echo "minting tokens"
@@ -21,7 +21,7 @@ cast send $RUSD "mint(address, uint256)" $ME 10000 --rpc-url "$RPC_URL" --privat
 
 # enable transferring to other chain
 echo "enabling destination chain"
-cast send $ROUTER "allowDstChainId(uint256, bool)" "$OTHER_CHAIN_ID" true --rpc-url "$RPC_URL" --private-key $PRIVATE_KEY
+cast send $ROUTER "permitDestinationChainId(uint256)" "$OTHER_CHAIN_ID" --rpc-url "$RPC_URL" --private-key $PRIVATE_KEY
 
 # enable token
 echo "enabling token"
@@ -33,4 +33,4 @@ echo "approving token spend"
 
 # send the money to the bridge
 echo "making bridge request"
-cast send -vvvv $ROUTER "bridge(address, uint256, uint256, uint256, address, uint256)" $RUSD 100 1 "$OTHER_CHAIN_ID" $ME $RANDOM --rpc-url "$RPC_URL" --private-key $PRIVATE_KEY
+cast send -vvvv $ROUTER "requestCrossChainSwap(address, uint256, uint256, uint256, address)" $RUSD 100 1 "$OTHER_CHAIN_ID" $ME --rpc-url "$RPC_URL" --private-key $PRIVATE_KEY
