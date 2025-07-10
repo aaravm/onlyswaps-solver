@@ -1,163 +1,117 @@
-use crate::eth::ERC20Token::{ERC20TokenErrors, ERC20TokenInstance};
-use crate::eth::Router::{RouterErrors, RouterInstance};
-use crate::events::BridgeDepositEvent;
-use alloy::hex;
-use alloy::network::Ethereum;
-use alloy::primitives::{Address, FixedBytes, U256};
+use std::collections::HashMap;
+use std::pin::Pin;
+use crate::config::{ConfigFile, NetworkConfig};
+use crate::eth::ERC20Token::ERC20TokenInstance;
+use crate::eth::Router::RouterInstance;
+use crate::model::{ChainState, Transfer};
+use crate::solver::ChainStateProvider;
+use alloy::primitives::{Address, U256};
 use alloy::providers::{DynProvider, Provider};
-use superalloy::provider::MultiChainProvider;
+use futures::future::try_join_all;
+use std::str::FromStr;
+use std::sync::Arc;
+use alloy::pubsub::SubscriptionStream;
+use alloy::rpc::types::Header;
+use eyre::eyre;
+use futures::Stream;
+use superalloy::provider::{MultiChainProvider, MultiProvider};
+use tonic::async_trait;
+use tonic::codegen::tokio_stream::adapters::Map;
+use tonic::codegen::tokio_stream::StreamExt;
 
-pub(crate) struct Chain {
-    pub chain_id: U256,
-    provider: DynProvider,
-    our_address: Address,
-    pub router: RouterInstance<DynProvider, Ethereum>,
-    token: ERC20TokenInstance<DynProvider, Ethereum>,
+pub(crate) struct Chain<P> {
+    chain_id: u64,
+    account: Address,
+    provider: Arc<P>,
+    token: ERC20TokenInstance<Arc<P>>,
+    router: RouterInstance<Arc<P>>,
 }
 
-pub(crate) struct ChainConfig {
-    pub chain_id: u64,
-    pub our_address: Address,
-    pub router_addr: Address,
-    pub token_addr: Address,
-}
+impl Chain<&DynProvider> {
+    pub async fn create_many<'a>(config: &ConfigFile, multi_provider: &'a MultiProvider<u64>) -> eyre::Result<HashMap<u64, Chain<&'a DynProvider>>> {
+        let mut chains: HashMap<u64, Chain<&DynProvider>> = HashMap::new();
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct Transfer {
-    pub request_id: FixedBytes<32>,
-    pub token: Address,
-    pub amount: U256,
-    pub src_chain_id: U256,
-    pub dest_chain_id: U256,
-    pub recipient: Address,
-    pub swap_fee: U256,
-    pub solver_fee: U256,
-    pub nonce: U256,
-    pub fulfilled: bool,
-}
+        for network_config in &config.networks {
+            let chain_id = network_config.chain_id;
+            let provider = multi_provider.get_provider(&chain_id).ok_or(eyre!("no provider configured for chain_id {}", chain_id))?;
+            let chain = Chain::new(network_config.clone(), provider).await?;
+            chain.withdraw_tokens().await?;
+            chains.insert(chain_id, chain);
+        }
 
-impl Chain {
-    pub fn new(mp: &impl MultiChainProvider<u64>, config: &ChainConfig) -> eyre::Result<Self> {
-        let provider = mp
-            .get_ethereum_provider(&config.chain_id)
-            .ok_or(eyre::eyre!("No provider for chain {}", config.chain_id))?
-            .clone();
-        let router = RouterInstance::new(config.router_addr, provider.clone());
-        let token = ERC20TokenInstance::new(config.token_addr, provider.clone());
+        Ok(chains)
+    }
+}
+impl<P> Chain<P>
+where
+    P: Provider,
+{
+  
+    pub async fn new(network_config: NetworkConfig, provider: P) -> eyre::Result<Self> {
+        let accounts = provider.get_accounts().await?;
+        if accounts.len() == 0 {
+            eyre::bail!("no accounts configured for private key!");
+        }
+        if accounts.len() > 1 {
+            println!("warning: multiple accounts configured for private key chain; using the first");
+        }
+        let provider = Arc::new(provider);
         Ok(Chain {
-            chain_id: U256::from(config.chain_id),
-            our_address: config.our_address,
-            provider,
-            router,
-            token,
+            chain_id: network_config.chain_id,
+            account: *accounts.first().expect("impossible because we just checked account"),
+            token: ERC20TokenInstance::new(Address::from_str(&network_config.rusd_address)?, provider.clone()),
+            router: RouterInstance::new(Address::from_str(&network_config.router_address)?, provider.clone()),
+            provider: provider.clone(),
         })
     }
 
-    pub async fn fetch_transfer_params(&self, deposit: BridgeDepositEvent) -> eyre::Result<Transfer> {
-        let request_id = deposit.request_id.into();
-        let transfer = self.router.getTransferParameters(deposit.request_id.into()).call().await?;
-        Ok(Transfer {
-            request_id,
-            token: transfer.token,
-            amount: transfer.amount,
-            src_chain_id: transfer.srcChainId,
-            dest_chain_id: transfer.dstChainId,
-            recipient: transfer.recipient,
-            swap_fee: transfer.swapFee,
-            solver_fee: transfer.solverFee,
-            nonce: transfer.nonce,
-            fulfilled: transfer.executed,
-        })
-    }
-
-    pub async fn attempt_token_relay_if_profitable(&self, transfer: Transfer) -> eyre::Result<()> {
-        if transfer.dest_chain_id != self.chain_id {
-            return Err(eyre::eyre!(
-                "transfer request for the wrong chain! expected {} got {}",
-                self.chain_id,
-                transfer.dest_chain_id
-            ));
-        }
-        if transfer.fulfilled {
-            // already been picked up, so we can ignore it
-            return Ok(());
-        }
-
-        let token_balance = self.token.balanceOf(self.our_address).call().await?;
-        if token_balance < transfer.amount {
-            println!("not making a trade for request {:?}, as we don't have enough funds", transfer.request_id);
-            println!("have {}, need {}", token_balance, transfer.amount);
-            return Ok(());
-        }
-        let native_balance = self.provider.get_balance(self.our_address).await?;
-        if !is_profitable(native_balance, token_balance, transfer.solver_fee) {
-            println!("not making a trade for request {:?}, as it's unprofitable", transfer.request_id);
-            return Ok(());
-        }
-
-        let approval = self.token.approve(*self.router.address(), transfer.amount).send().await?;
-        approval.get_receipt().await?;
-        match self
-            .router
-            .relayTokens(
-                *self.token.address(),
-                transfer.recipient,
-                transfer.amount,
-                transfer.request_id,
-                transfer.src_chain_id,
-            )
-            .send()
-            .await
-        {
-            Ok(pending) => {
-                let rx = pending.get_receipt().await?;
-                println!("transfer of {} made on chain {}: {}", transfer.amount, transfer.dest_chain_id, rx.transaction_hash);
-                Ok(())
-            }
-            Err(e) => {
-                if let Some(err) = e.as_decoded_interface_error::<RouterErrors>() {
-                    match err {
-                        RouterErrors::AlreadyFulfilled(_) => {
-                            println!("request already fulfilled");
-                            return Ok(());
-                        }
-                        RouterErrors::ZeroAmount(_) => eyre::bail!("request zero amount - something went very wrong"),
-                        RouterErrors::InvalidTokenOrRecipient(_) => eyre::bail!("invalid token or recipient"),
-                        _ => eyre::bail!("failed to decode error"),
-                    }
-                }
-                if let Some(err) = e.as_decoded_interface_error::<ERC20TokenErrors>() {
-                    match err {
-                        ERC20TokenErrors::ERC20InsufficientAllowance(_) => eyre::bail!("for some strange reason our allowance didn't go through before making the transfer"),
-                        ERC20TokenErrors::ERC20InsufficientBalance(_) => {
-                            println!("insufficient balance for token transfer of {} - ignoring", transfer.amount);
-                            return Ok(());
-                        }
-                        _ => eyre::bail!("failed to decode error"),
-                    }
-                }
-                    let raw = e.as_revert_data().unwrap_or_default();
-                    eyre::bail!("reverted with unknown data: 0x{}", hex::encode(raw))
-            }
-        }
-    }
     pub async fn withdraw_tokens(&self) -> eyre::Result<()> {
         println!("checking funds for {}", self.chain_id);
 
         let min_balance = U256::from(1_000_000_000);
-        let rusd_balance = self.token.balanceOf(self.our_address).call().await?;
+        let rusd_balance = self.token.balanceOf(self.account).call().await?;
         if rusd_balance > min_balance {
             println!("balance {} - not withdrawing tokens for chain_id {}", rusd_balance, &self.chain_id);
             return Ok(());
         }
 
-        let tx = self.token.mint(self.our_address, min_balance).send().await?;
+        let tx = self.token.mint(self.account, min_balance).send().await?;
         tx.get_receipt().await?;
         println!("withdrew tokens for chain_id {}", &self.chain_id);
         Ok(())
     }
+    
+    pub async fn stream_block_numbers(&self) -> eyre::Result<Pin<Box<dyn Stream<Item = BlockEvent> + Send>>> {
+        let chain_id = self.chain_id.clone();
+        let stream = self.provider.subscribe_blocks()
+            .await?
+            .into_stream()
+            .map(move |header| BlockEvent { chain_id, block_number: header.number });
+        
+        Ok(Box::pin(stream))
+    }
+}
+pub(crate) struct BlockEvent { 
+    pub chain_id: u64, 
+    pub block_number: u64 
 }
 
-fn is_profitable(native_balance: U256, token_balance: U256, fee: U256) -> bool {
-    true
+#[async_trait]
+impl ChainStateProvider for Chain<&DynProvider> {
+    async fn fetch_state(&self) -> eyre::Result<ChainState> {
+        let native_balance = self.provider.get_balance(self.account).await?;
+        let token_balance = self.token.balanceOf(self.account).call().await?;
+        let unfulfilled = self.router.getUnfulfilledRequestIds().call().await?;
+        let reqs = unfulfilled.into_iter().map(async |id| -> eyre::Result<Transfer> {
+            let params = self.router.getTransferParameters(id).call().await?;
+            Ok(Transfer { request_id: *id, params })
+        });
+        let transfers = try_join_all(reqs).await?;
+
+        Ok(ChainState {
+            native_balance,
+            token_balance,
+            transfers,
+        })
+    }
 }

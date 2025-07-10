@@ -1,6 +1,6 @@
-use crate::config::NetworkConfig;
 use alloy::network::{Ethereum, EthereumWallet};
 use alloy::providers::{Provider, ProviderBuilder, WsConnect};
+use crate::config::NetworkConfig;
 use alloy::signers::local::PrivateKeySigner;
 use eyre::eyre;
 use superalloy::provider::MultiProvider;

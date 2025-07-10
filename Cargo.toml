@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-alloy = { version = "1.0.16", features = ["provider-ws"] }
+alloy = { version = "1.0.16", features = ["provider-ws", "provider-anvil-node"] }
 axum = "0.8.4"
 clap = { version = "4.5.40", features = ["derive", "env"] }
 omnievent = { git = "https://github.com/randa-mu/dcipher.git", branch = "main" }
@@ -17,6 +17,6 @@ tokio = { version = "1.45.1", features = ["rt-multi-thread", "signal"] }
 itertools = "0.10.5"
 thiserror = "2.0.12"
 tonic = "0.13.1"
-uuid = { version = "1.17.0", features = ["v4"] }
 bytes = "1.10.1"
 dotenv = "0.15.0"
+futures = "0.3.31"

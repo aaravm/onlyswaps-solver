@@ -7,6 +7,7 @@ sol!(
 );
 
 sol!(
+    #[derive(Debug)]
     #[sol(rpc)]
     Router,
     "onlysubs-solidity/out/Router.sol/Router.json",
