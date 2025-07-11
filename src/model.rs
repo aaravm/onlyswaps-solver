@@ -1,17 +1,19 @@
 use crate::eth::IRouter::TransferParams;
 use alloy::primitives::{Address, U256};
 
+pub type RequestId = [u8; 32];
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ChainState {
     pub token_addr: Address, // this is kinda yuck, but simplest way to support it for now
     pub native_balance: U256,
     pub token_balance: U256,
     pub transfers: Vec<Transfer>,
+    pub already_fulfilled: Vec<RequestId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Transfer {
-    pub request_id: [u8; 32],
+    pub request_id: RequestId,
     pub params: TransferParams,
 }
 
@@ -34,7 +36,7 @@ pub struct Trade {
     pub src_chain_id: U256,
     pub dest_chain_id: U256,
     pub recipient_addr: Address,
-    pub request_id: [u8; 32],
+    pub request_id: RequestId,
     pub amount: U256,
 }
 

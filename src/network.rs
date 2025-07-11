@@ -1,19 +1,20 @@
 use crate::config::NetworkConfig;
 use crate::eth::ERC20Token::ERC20TokenInstance;
 use crate::eth::Router::RouterInstance;
+use crate::model::{BlockEvent, ChainState, Transfer};
+use crate::solver::ChainStateProvider;
 use alloy::network::EthereumWallet;
 use alloy::primitives::{Address, U256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder, WsConnect};
 use alloy::signers::local::PrivateKeySigner;
 use futures::Stream;
+use futures::future::try_join_all;
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::str::FromStr;
-use futures::future::try_join_all;
 use tonic::async_trait;
 use tonic::codegen::tokio_stream::StreamExt;
-use crate::model::{BlockEvent, ChainState, Transfer};
-use crate::solver::ChainStateProvider;
 
 pub(crate) struct Network<P> {
     pub chain_id: u64,
@@ -80,19 +81,14 @@ impl<P: Provider> Network<P> {
 
     pub async fn stream_block_numbers(&self) -> eyre::Result<Pin<Box<dyn Stream<Item = BlockEvent> + Send>>> {
         let chain_id = self.chain_id.clone();
-        let stream = self.provider.subscribe_blocks()
-            .await?
-            .into_stream()
-            .map(move |header| BlockEvent {
-                chain_id,
-                block_number: header.number,
-            });
+        let stream = self.provider.subscribe_blocks().await?.into_stream().map(move |header| BlockEvent {
+            chain_id,
+            block_number: header.number,
+        });
 
         Ok(Box::pin(stream))
     }
 }
-
-
 
 #[async_trait]
 impl ChainStateProvider for Network<DynProvider> {
@@ -100,6 +96,8 @@ impl ChainStateProvider for Network<DynProvider> {
         let token_addr = self.token.address().clone();
         let native_balance = self.provider.get_balance(self.own_addr).await?;
         let token_balance = self.token.balanceOf(self.own_addr).call().await?;
+        let already_fulfilled = self.router.getFulfilledRequestIds().call().await?.into_iter().map_into().collect_vec();
+
         let unfulfilled = self.router.getUnfulfilledRequestIds().call().await?;
         let reqs = unfulfilled.into_iter().map(async |id| -> eyre::Result<Transfer> {
             let params = self.router.getTransferParameters(id).call().await?;
@@ -112,7 +110,7 @@ impl ChainStateProvider for Network<DynProvider> {
             native_balance,
             token_balance,
             transfers,
+            already_fulfilled,
         })
     }
-
 }

@@ -61,13 +61,16 @@ fn solve(transfer_request: &Transfer, trades: &mut Vec<Trade>, states: &mut Hash
         ..
     } = transfer_request.params;
 
-    println!("{}", token);
     let dest_state = match states.get_mut(&normalise_chain_id(dstChainId)) {
         None => return,
         Some(state) => state,
     };
 
     if executed {
+        return;
+    }
+    
+    if dest_state.already_fulfilled.contains(&transfer_request.request_id) {
         return;
     }
 
@@ -118,12 +121,14 @@ mod tests {
             native_balance: U256::from(1),
             token_balance: U256::from(1),
             transfers: vec![transfer_params.clone()],
+            already_fulfilled: vec![],
         };
         let chain_two_state = ChainState {
             token_addr: TOKEN_ADDR,
             native_balance: U256::from(100),
             token_balance: U256::from(1000),
             transfers: Vec::default(),
+            already_fulfilled: vec![],
         };
         let chain_one = StubbedChain { state: chain_one_state };
         let chain_two = StubbedChain { state: chain_two_state };
@@ -158,6 +163,7 @@ mod tests {
             native_balance: U256::from(0),
             token_balance: U256::from(0),
             transfers: vec![transfer_params, transfer_params_2],
+            already_fulfilled: vec![],
         };
         // on dst_chain, we only have enough balance to cover one tx
         let dst_chain_state = ChainState {
@@ -165,6 +171,7 @@ mod tests {
             native_balance: U256::from(1000),
             token_balance: U256::from(200),
             transfers: vec![],
+            already_fulfilled: vec![],
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -187,6 +194,7 @@ mod tests {
             native_balance: U256::from(1000),
             token_balance: U256::from(100),
             transfers: vec![transfer_params],
+            already_fulfilled: vec![],
         };
         // on dst_chain, we only have enough balance to cover one tx
         let dst_chain_state = ChainState {
@@ -194,6 +202,7 @@ mod tests {
             native_balance: U256::from(1000),
             token_balance: U256::from(200),
             transfers: vec![transfer_params_2],
+            already_fulfilled: vec![],
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -212,12 +221,14 @@ mod tests {
             native_balance: U256::from(0),
             token_balance: U256::from(0),
             transfers: vec![],
+            already_fulfilled: vec![],
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
             native_balance: U256::from(0),
             token_balance: U256::from(1000),
             transfers: vec![],
+            already_fulfilled: vec![],
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -236,12 +247,14 @@ mod tests {
             native_balance: U256::from(0),
             token_balance: U256::from(0),
             transfers: vec![create_transfer_params(USER_ADDR, 1, 2, 100)],
+            already_fulfilled: vec![],
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
             native_balance: U256::from(0),
             token_balance: U256::from(1000),
             transfers: vec![],
+            already_fulfilled: vec![],
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -260,12 +273,14 @@ mod tests {
             native_balance: U256::from(0),
             token_balance: U256::from(0),
             transfers: vec![create_transfer_params(USER_ADDR, 1, 2, 100)],
+            already_fulfilled: vec![],
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
             native_balance: U256::from(1000),
             token_balance: U256::from(0),
             transfers: vec![],
+            already_fulfilled: vec![],
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -287,12 +302,14 @@ mod tests {
             native_balance: U256::from(0),
             token_balance: U256::from(0),
             transfers: vec![transfer_params],
+            already_fulfilled: vec![],
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
             native_balance: U256::from(1000),
             token_balance: U256::from(1000),
             transfers: vec![],
+            already_fulfilled: vec![],
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -314,12 +331,14 @@ mod tests {
             native_balance: U256::from(0),
             token_balance: U256::from(0),
             transfers: vec![transfer_params],
+            already_fulfilled: vec![],
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
             native_balance: U256::from(1000),
             token_balance: U256::from(1000),
             transfers: vec![],
+            already_fulfilled: vec![],
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -341,12 +360,14 @@ mod tests {
             native_balance: U256::from(0),
             token_balance: U256::from(0),
             transfers: vec![transfer_params],
+            already_fulfilled: vec![],
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
             native_balance: U256::from(1000),
             token_balance: U256::from(1000),
             transfers: vec![],
+            already_fulfilled: vec![],
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -369,6 +390,7 @@ mod tests {
             native_balance: U256::from(0),
             token_balance: U256::from(0),
             transfers: vec![transfer_params, transfer_params_2],
+            already_fulfilled: vec![],
         };
         // on dst_chain, we only have enough balance to cover one tx
         let dst_chain_state = ChainState {
@@ -376,6 +398,7 @@ mod tests {
             native_balance: U256::from(1000),
             token_balance: U256::from(150),
             transfers: vec![],
+            already_fulfilled: vec![],
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -385,6 +408,38 @@ mod tests {
         // then
         assert_that!(trades).has_length(1);
     }
+
+
+    #[test]
+    fn transfers_that_have_already_been_fulfilled_dont_make_trades() {
+        // given
+        // both transfers use 100
+        let transfer_params = create_transfer_params(USER_ADDR, 1, 2, 100);
+
+        let src_chain_state = ChainState {
+            token_addr: TOKEN_ADDR,
+            native_balance: U256::from(0),
+            token_balance: U256::from(0),
+            transfers: vec![transfer_params.clone()],
+            already_fulfilled: vec![],
+        };
+        // on dst_chain, we only have enough balance to cover one tx
+        let dst_chain_state = ChainState {
+            token_addr: TOKEN_ADDR,
+            native_balance: U256::from(1000),
+            token_balance: U256::from(150),
+            transfers: vec![],
+            already_fulfilled: vec![transfer_params.request_id],
+        };
+        let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
+
+        // when
+        let trades = calculate_trades(1, &state);
+
+        // then
+        assert_that!(trades).has_length(0);
+    }
+
 
     fn create_transfer_params(sender: Address, src_chain_id: u64, dest_chain_id: u64, amount: u64) -> Transfer {
         Transfer {

@@ -9,7 +9,9 @@ pub(crate) mod test {
     use alloy::primitives::Address;
     use std::fs::File;
     use std::io::Read;
-    pub fn generate_request_id() -> [u8; 32] {
+    use crate::model::RequestId;
+
+    pub fn generate_request_id() -> RequestId {
         let mut buf = [0u8; 32];
         File::open("/dev/urandom")
             .and_then(|mut f| f.read_exact(&mut buf))
