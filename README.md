@@ -17,9 +17,9 @@ First retrieve and build submodules with `./build-dependencies.sh` then run `car
 | `SOLVER_PORT`        | No         | Port on which to host the healthcheck endpoint                                      | `8080`                                   | `8080`                  |
 
 ## Running locally
-- Start two anvil blockchains:
-`$ anvil --port 1337 --chain-id 1337`
-`$ anvil --port 1338 --chain-id 1338`
+- Start two anvil blockchains (note: block time is necessary or chain state can get confused):
+`$ anvil --port 1337 --chain-id 1337 --block-time 3`
+`$ anvil --port 1338 --chain-id 1338 --block-time 3`
 
 - Deploy the contracts from onlysubs-solidity by:
   - `cd` into [onlysubs-solidity](./onlysubs-solidity)
