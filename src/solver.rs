@@ -3,7 +3,7 @@ use crate::model::{ChainState, Trade, Transfer};
 use crate::util::normalise_chain_id;
 use alloy::primitives::U256;
 use std::collections::HashMap;
-use tonic::async_trait;
+use async_trait::async_trait;
 
 #[async_trait]
 pub(crate) trait ChainStateProvider {
@@ -69,7 +69,7 @@ fn solve(transfer_request: &Transfer, trades: &mut Vec<Trade>, states: &mut Hash
     if executed {
         return;
     }
-    
+
     if dest_state.already_fulfilled.contains(&transfer_request.request_id) {
         return;
     }
@@ -106,7 +106,7 @@ mod tests {
     use speculoos::assert_that;
     use speculoos::vec::VecAssertions;
     use std::collections::HashMap;
-    use tonic::async_trait;
+    use async_trait::async_trait;
 
     static USER_ADDR: Address = address!("0xdeadbeef6964af9d7eed9e03e53415d37aa96045");
     static TOKEN_ADDR: Address = address!("0xd8da6bf26964af9d7eed9e03e53415d37aa96045");

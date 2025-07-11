@@ -5,7 +5,7 @@ use alloy::providers::DynProvider;
 use futures::future::try_join_all;
 use futures::stream::select_all;
 use std::collections::HashMap;
-use tonic::codegen::tokio_stream::StreamExt;
+use futures::StreamExt;
 use crate::model::BlockEvent;
 
 pub struct App {}

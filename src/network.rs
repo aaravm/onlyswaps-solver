@@ -13,8 +13,8 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::str::FromStr;
-use tonic::async_trait;
-use tonic::codegen::tokio_stream::StreamExt;
+use async_trait::async_trait;
+use futures::StreamExt;
 
 pub(crate) struct Network<P> {
     pub chain_id: u64,
