@@ -39,7 +39,7 @@ First retrieve and build submodules with `./build-dependencies.sh` then run `car
 `$ cargo run -- --config-file ./config-local.json --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d`
  
 - request a swap a monitor the logs for it happening:
-`$ ./request-swap-sh 1337 1338`
+`$ ./request-swap.sh 1337 1338`
  
 - you can also swap in the other direction:
-`$ ./request-swap-sh 1338 1337`
+`$ ./request-swap.sh 1338 1337`
