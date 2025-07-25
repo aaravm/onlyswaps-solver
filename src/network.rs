@@ -66,7 +66,7 @@ impl<P: Provider> Network<P> {
     pub async fn withdraw_tokens(&self) -> eyre::Result<()> {
         println!("checking funds for {}", self.chain_id);
 
-        let min_balance = U256::from_str("1_000_000_000_000_000_000_000")?;
+        let min_balance = U256::from_str("1_000_000_000_000_000_000_000_000_000")?;
         let rusd_balance = self.token.balanceOf(self.own_addr).call().await?;
         if rusd_balance > min_balance {
             println!("balance {} - not withdrawing tokens for chain_id {}", rusd_balance, &self.chain_id);
@@ -96,9 +96,9 @@ impl ChainStateProvider for Network<DynProvider> {
         let token_addr = self.token.address().clone();
         let native_balance = self.provider.get_balance(self.own_addr).await?;
         let token_balance = self.token.balanceOf(self.own_addr).call().await?;
-        let already_fulfilled = self.router.getFulfilledRequestIds().call().await?.into_iter().map_into().collect_vec();
+        let already_fulfilled = self.router.getFulfilledTransfers().call().await?.into_iter().map_into().collect_vec();
 
-        let unfulfilled = self.router.getUnfulfilledRequestIds().call().await?;
+        let unfulfilled = self.router.getUnfulfilledSolverRefunds().call().await?;
         let reqs = unfulfilled.into_iter().map(async |id| -> eyre::Result<Transfer> {
             let params = self.router.getTransferParameters(id).call().await?;
             Ok(Transfer { request_id: *id, params })
