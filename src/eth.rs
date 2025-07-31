@@ -3,8 +3,8 @@ use alloy::sol;
 sol!(
     #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     #[sol(rpc)]
-    ERC20Token,
-    "onlysubs-solidity/out/ERC20Token.sol/ERC20Token.json"
+    ERC20FaucetToken,
+    "onlysubs-solidity/out/ERC20FaucetToken.sol/ERC20FaucetToken.json"
 );
 
 sol!(

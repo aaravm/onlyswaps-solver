@@ -1,4 +1,3 @@
-use crate::eth::ERC20Token::ERC20TokenInstance;
 use crate::eth::Router::RouterInstance;
 use crate::model::Trade;
 use crate::network::Network;
@@ -6,10 +5,11 @@ use crate::util::normalise_chain_id;
 use alloy::primitives::TxHash;
 use alloy::providers::Provider;
 use std::collections::HashMap;
+use crate::eth::ERC20FaucetToken::ERC20FaucetTokenInstance;
 
 pub(crate) struct TradeExecutor<'a, P> {
     routers: HashMap<u64, &'a RouterInstance<P>>,
-    tokens: HashMap<u64, &'a ERC20TokenInstance<P>>,
+    tokens: HashMap<u64, &'a ERC20FaucetTokenInstance<P>>,
 }
 
 impl<'a, P: Provider> TradeExecutor<'a, P> {

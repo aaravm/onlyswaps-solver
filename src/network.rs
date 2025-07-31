@@ -1,5 +1,4 @@
 use crate::config::NetworkConfig;
-use crate::eth::ERC20Token::ERC20TokenInstance;
 use crate::eth::Router::RouterInstance;
 use crate::model::{BlockEvent, ChainState, Transfer};
 use crate::solver::ChainStateProvider;
@@ -15,12 +14,14 @@ use std::pin::Pin;
 use std::str::FromStr;
 use async_trait::async_trait;
 use futures::StreamExt;
+use crate::eth::ERC20FaucetToken;
+use crate::eth::ERC20FaucetToken::ERC20FaucetTokenInstance;
 
 pub(crate) struct Network<P> {
     pub chain_id: u64,
     pub provider: P,
     pub own_addr: Address,
-    pub token: ERC20TokenInstance<P>,
+    pub token: ERC20FaucetTokenInstance<P>,
     pub router: RouterInstance<P>,
 }
 
@@ -31,7 +32,12 @@ impl Network<DynProvider> {
 
         for config in network_configs.iter() {
             let network = Network::new(&signer, config).await?;
-            network.withdraw_tokens().await?;
+            match network.withdraw_tokens().await {
+                Ok(()) => {}
+                Err(e) => {
+                    println!("failed to withdraw from faucet - probably already done: {}", e)
+                }
+            };
 
             networks.insert(config.chain_id, network);
         }
@@ -53,7 +59,7 @@ impl Network<DynProvider> {
 
         println!("own addr: {}", own_addr);
         Ok(Self {
-            token: ERC20TokenInstance::new(config.rusd_address.parse()?, provider.clone()),
+            token: ERC20FaucetToken::new(config.rusd_address.parse()?, provider.clone()),
             router: RouterInstance::new(config.router_address.parse()?, provider.clone()),
             chain_id,
             provider,
@@ -73,7 +79,7 @@ impl<P: Provider> Network<P> {
             return Ok(());
         }
 
-        let tx = self.token.mint(self.own_addr, min_balance).send().await?;
+        let tx = self.token.mint().send().await?;
         let hash = tx.watch().await?;
         println!("withdrew tokens for chain_id {}: {}", &self.chain_id, hash);
         Ok(())
