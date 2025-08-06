@@ -1,3 +1,4 @@
+use crate::eth::ERC20FaucetToken::ERC20FaucetTokenInstance;
 use crate::eth::Router::RouterInstance;
 use crate::model::Trade;
 use crate::network::Network;
@@ -5,7 +6,6 @@ use crate::util::normalise_chain_id;
 use alloy::primitives::TxHash;
 use alloy::providers::Provider;
 use std::collections::HashMap;
-use crate::eth::ERC20FaucetToken::ERC20FaucetTokenInstance;
 
 pub(crate) struct TradeExecutor<'a, P> {
     routers: HashMap<u64, &'a RouterInstance<P>>,
@@ -30,10 +30,19 @@ impl<'a, P: Provider> TradeExecutor<'a, P> {
                 .get(&normalise_chain_id(trade.dest_chain_id))
                 .expect("somehow didn't have a token binding for a solved trade");
 
-            // approve the movement of funds from the ERC20, but don't wait for the tx receipt;
-            // in theory, they should be processed in the same block in nonce order
-            if let Err(e) = token.approve(*router.address(), trade.amount).send().await {
-                println!("error approving trade: {}", e);
+            // in theory, we shouldn't need to wait until the next block because txs will be processed in nonce order
+            // but for whatever reason this doesn't seem to be the case :(
+            let approve: eyre::Result<TxHash> = async {
+                let tx = token.approve(*router.address(), trade.amount).send().await?;
+                let receipt = tx.watch().await?;
+                Ok(receipt)
+            }
+            .await;
+            match approve {
+                Ok(_) => {}
+                Err(e) => {
+                    println!("error approving trade: {}", e);
+                }
             }
 
             // actually send the funds via the router contract

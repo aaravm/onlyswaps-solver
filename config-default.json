@@ -1,16 +1,14 @@
 {
-  "networks": [
-    {
-      "chain_id": 84532,
-      "rpc_url": "wss://base-sepolia.drpc.org",
-      "rusd_address": "0x73e04901b3fa84b5bd6782d446751e91c4e2616c",
-      "router_address": "0xd81DCC29f1B8EED20a5Bf18cA0875115d121Dffd"
-    },
-    {
-      "chain_id": 43114,
-      "rpc_url": "wss://avalanche-c-chain-rpc.publicnode.com",
-      "rusd_address": "0x73e04901b3fa84b5bd6782d446751e91c4e2616c",
-      "router_address": "0xd81DCC29f1B8EED20a5Bf18cA0875115d121Dffd"
-    }
-  ]
+  "networks": [{
+    "chain_id": 43113,
+    "rpc_url": "wss://avalanche-fuji-c-chain-rpc.publicnode.com",
+    "rusd_address": "0x3772EA40D24161e90FFD4227157546Aa1fA76301",
+    "router_address": "0x778401cC5Cfa75B510A22783Ff354FffbA4D6143"
+  }, {
+    "chain_id": 84532,
+    "rpc_url": "wss://base-sepolia-rpc.publicnode.com",
+    "rusd_address": "0x3772EA40D24161e90FFD4227157546Aa1fA76301",
+    "router_address": "0x778401cC5Cfa75B510A22783Ff354FffbA4D6143"
+  }]
 }
+
