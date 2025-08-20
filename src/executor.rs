@@ -33,7 +33,7 @@ impl<'a, P: Provider> TradeExecutor<'a, P> {
             // in theory, we shouldn't need to wait until the next block because txs will be processed in nonce order
             // but for whatever reason this doesn't seem to be the case :(
             let approve: eyre::Result<TxHash> = async {
-                let tx = token.approve(*router.address(), trade.amount).send().await?;
+                let tx = token.approve(*router.address(), trade.swap_amount).send().await?;
                 let receipt = tx.watch().await?;
                 Ok(receipt)
             }
@@ -51,7 +51,7 @@ impl<'a, P: Provider> TradeExecutor<'a, P> {
                     .relayTokens(
                         trade.token_addr,
                         trade.recipient_addr,
-                        trade.amount,
+                        trade.swap_amount,
                         trade.request_id.into(),
                         trade.src_chain_id,
                     )
@@ -62,8 +62,8 @@ impl<'a, P: Provider> TradeExecutor<'a, P> {
             }
             .await;
             match relay {
-                Ok(_) => println!("successfully traded {} on {}", trade.amount, trade.dest_chain_id),
-                Err(e) => println!("error trading {} on {}: {}", trade.amount, trade.dest_chain_id, e),
+                Ok(_) => println!("successfully traded {} on {}", trade.swap_amount, trade.dest_chain_id),
+                Err(e) => println!("error trading {} on {}: {}", trade.swap_amount, trade.dest_chain_id, e),
             }
         }
     }

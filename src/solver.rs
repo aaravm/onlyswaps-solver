@@ -56,6 +56,7 @@ fn solve(transfer_request: &Transfer, trades: &mut Vec<Trade>, states: &mut Hash
         dstChainId,
         token,
         amount,
+        swapFee,
         solverFee,
         executed,
         ..
@@ -78,7 +79,8 @@ fn solve(transfer_request: &Transfer, trades: &mut Vec<Trade>, states: &mut Hash
         return;
     }
 
-    if dest_state.token_balance < amount {
+    let transfer_amount = amount - solverFee - swapFee;
+    if dest_state.token_balance < transfer_amount{
         return;
     }
 
@@ -92,7 +94,7 @@ fn solve(transfer_request: &Transfer, trades: &mut Vec<Trade>, states: &mut Hash
     }
 
     // we commit some of our tokens to this trade so the next one doesn't fail
-    dest_state.token_balance -= amount;
+    dest_state.token_balance -= transfer_amount;
     trades.push(transfer_request.into())
 }
 
@@ -139,13 +141,14 @@ mod tests {
         let trades = solver.on_block(chain_id).await.unwrap();
 
         // then
+        let expected_output_amount = transfer_params.params.amount - transfer_params.params.solverFee - transfer_params.params.swapFee;
         let expected_trade = Trade {
             request_id: transfer_params.request_id,
             token_addr: transfer_params.params.token,
             src_chain_id: transfer_params.params.srcChainId,
             dest_chain_id: transfer_params.params.dstChainId,
             recipient_addr: transfer_params.params.recipient,
-            amount: transfer_params.params.amount,
+            swap_amount: expected_output_amount,
         };
         assert_that!(trades).has_length(1);
         assert_that!(trades[0]).is_equal_to(expected_trade);
@@ -409,7 +412,6 @@ mod tests {
         assert_that!(trades).has_length(1);
     }
 
-
     #[test]
     fn transfers_that_have_already_been_fulfilled_dont_make_trades() {
         // given
@@ -438,6 +440,39 @@ mod tests {
 
         // then
         assert_that!(trades).has_length(0);
+    }
+
+    #[test]
+    fn transfers_account_for_solver_and_swap_fees() {
+        // given
+        // we have a super high solver fee
+        let mut transfer_params = create_transfer_params(USER_ADDR, 1, 2, 100);
+        transfer_params.params.solverFee = U256::from(50);
+
+        let src_chain_state = ChainState {
+            token_addr: TOKEN_ADDR,
+            native_balance: U256::from(0),
+            token_balance: U256::from(0),
+            transfers: vec![transfer_params.clone()],
+            already_fulfilled: vec![],
+        };
+        // on dst_chain, we only have enough balance to cover one tx
+        let dst_chain_state = ChainState {
+            token_addr: TOKEN_ADDR,
+            native_balance: U256::from(1000),
+            // our balance can cover the amount - fees, but not the full amount
+            token_balance: U256::from(50),
+            transfers: vec![],
+            already_fulfilled: vec![],
+        };
+        let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
+
+        // when
+        let trades = calculate_trades(1, &state);
+
+        // then
+        assert_that!(trades).has_length(1);
+
     }
 
 

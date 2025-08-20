@@ -25,7 +25,7 @@ impl From<&Transfer> for Trade {
             dest_chain_id: transfer.params.dstChainId,
             recipient_addr: transfer.params.recipient,
             request_id: transfer.request_id,
-            amount: transfer.params.amount,
+            swap_amount: transfer.params.amount - transfer.params.solverFee - transfer.params.swapFee,
         }
     }
 }
@@ -37,7 +37,7 @@ pub struct Trade {
     pub dest_chain_id: U256,
     pub recipient_addr: Address,
     pub request_id: RequestId,
-    pub amount: U256,
+    pub swap_amount: U256,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
