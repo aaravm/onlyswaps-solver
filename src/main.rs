@@ -1,20 +1,20 @@
-mod network;
 mod api;
-mod eth;
-mod config;
 mod app;
-mod solver;
-mod model;
+mod config;
+mod eth;
 mod executor;
+mod model;
+mod network;
+mod solver;
 mod util;
 
-use clap::Parser;
-use eyre::eyre;
-use dotenv::dotenv;
 use crate::api::ApiServer;
 use crate::app::App;
-use crate::config::{load_config_file, CliArgs, ConfigFile};
+use crate::config::{CliArgs, ConfigFile, load_config_file};
 use crate::network::Network;
+use clap::Parser;
+use dotenv::dotenv;
+use eyre::eyre;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -43,7 +43,7 @@ async fn main() -> eyre::Result<()> {
                 Err(e) => Err(eyre!("http server stopped unexpectedly: {}", e))
             }
         }
-        
+
         _ = sigterm.recv() => {
             println!("received SIGTERM, shutting down...");
             Ok(())

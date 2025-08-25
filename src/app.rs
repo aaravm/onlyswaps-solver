@@ -1,12 +1,12 @@
 use crate::executor::TradeExecutor;
+use crate::model::BlockEvent;
 use crate::network::Network;
 use crate::solver::Solver;
 use alloy::providers::DynProvider;
+use futures::StreamExt;
 use futures::future::try_join_all;
 use futures::stream::select_all;
 use std::collections::HashMap;
-use futures::StreamExt;
-use crate::model::BlockEvent;
 
 pub struct App {}
 impl App {

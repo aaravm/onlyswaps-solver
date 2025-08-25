@@ -1,4 +1,6 @@
 use crate::config::NetworkConfig;
+use crate::eth::ERC20FaucetToken;
+use crate::eth::ERC20FaucetToken::ERC20FaucetTokenInstance;
 use crate::eth::Router::RouterInstance;
 use crate::model::{BlockEvent, ChainState, Transfer};
 use crate::solver::ChainStateProvider;
@@ -6,16 +8,14 @@ use alloy::network::EthereumWallet;
 use alloy::primitives::{Address, U256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder, WsConnect};
 use alloy::signers::local::PrivateKeySigner;
+use async_trait::async_trait;
 use futures::Stream;
+use futures::StreamExt;
 use futures::future::try_join_all;
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::str::FromStr;
-use async_trait::async_trait;
-use futures::StreamExt;
-use crate::eth::ERC20FaucetToken;
-use crate::eth::ERC20FaucetToken::ERC20FaucetTokenInstance;
 
 pub(crate) struct Network<P> {
     pub chain_id: u64,
