@@ -26,7 +26,7 @@ pub(crate) struct Network<P> {
 }
 
 impl Network<DynProvider> {
-    pub async fn create_many(private_key: &str, network_configs: &Vec<NetworkConfig>) -> eyre::Result<HashMap<u64, Self>> {
+    pub async fn create_many(private_key: &str, network_configs: &[NetworkConfig]) -> eyre::Result<HashMap<u64, Self>> {
         let mut networks = HashMap::new();
         let signer = PrivateKeySigner::from_str(private_key)?;
 
@@ -35,7 +35,7 @@ impl Network<DynProvider> {
             match network.withdraw_tokens().await {
                 Ok(()) => {}
                 Err(e) => {
-                    println!("failed to withdraw from faucet - probably already done: {}", e)
+                    println!("failed to withdraw from faucet - probably already done: {e}")
                 }
             };
 
@@ -48,7 +48,7 @@ impl Network<DynProvider> {
 
     pub async fn new(signer: &PrivateKeySigner, config: &NetworkConfig) -> eyre::Result<Self> {
         let url = config.rpc_url.clone();
-        let chain_id = config.chain_id.clone();
+        let chain_id = config.chain_id;
         let provider = ProviderBuilder::new()
             .with_gas_estimation()
             .wallet(EthereumWallet::new(signer.clone()))
@@ -57,7 +57,7 @@ impl Network<DynProvider> {
             .erased();
         let own_addr = signer.address();
 
-        println!("own addr: {}", own_addr);
+        println!("own addr: {own_addr}");
         Ok(Self {
             token: ERC20FaucetToken::new(config.rusd_address.parse()?, provider.clone()),
             router: RouterInstance::new(config.router_address.parse()?, provider.clone()),
@@ -86,7 +86,7 @@ impl<P: Provider> Network<P> {
     }
 
     pub async fn stream_block_numbers(&self) -> eyre::Result<Pin<Box<dyn Stream<Item = BlockEvent> + Send>>> {
-        let chain_id = self.chain_id.clone();
+        let chain_id = self.chain_id;
         let stream = self.provider.subscribe_blocks().await?.into_stream().map(move |header| BlockEvent {
             chain_id,
             block_number: header.number,
@@ -99,7 +99,7 @@ impl<P: Provider> Network<P> {
 #[async_trait]
 impl ChainStateProvider for Network<DynProvider> {
     async fn fetch_state(&self) -> eyre::Result<ChainState> {
-        let token_addr = self.token.address().clone();
+        let token_addr = *self.token.address();
         let native_balance = self.provider.get_balance(self.own_addr).await?;
         let token_balance = self.token.balanceOf(self.own_addr).call().await?;
         let already_fulfilled = self.router.getFulfilledTransfers().call().await?.into_iter().map_into().collect_vec();

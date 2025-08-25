@@ -45,7 +45,7 @@ fn calculate_trades(chain_id: u64, states: &HashMap<u64, ChainState>) -> Vec<Tra
         .transfers;
 
     for transfer in transfers {
-        solve(&transfer, &mut trades, &mut owned_states);
+        solve(transfer, &mut trades, &mut owned_states);
     }
 
     trades

@@ -41,7 +41,7 @@ impl<'a, P: Provider> TradeExecutor<'a, P> {
             match approve {
                 Ok(_) => {}
                 Err(e) => {
-                    println!("error approving trade: {}", e);
+                    println!("error approving trade: {e}");
                 }
             }
 
