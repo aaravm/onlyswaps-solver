@@ -9,10 +9,7 @@ pub(crate) struct ApiServer {
 impl ApiServer {
     pub fn new(port: u16) -> Self {
         let app = Router::new().route("/health", get(healthcheck_handler));
-        Self {
-            port,
-            app,
-        }
+        Self { port, app }
     }
 
     pub async fn start(self) -> eyre::Result<()> {

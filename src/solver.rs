@@ -2,8 +2,8 @@ use crate::eth::IRouter::TransferParams;
 use crate::model::{ChainState, Trade, Transfer};
 use crate::util::normalise_chain_id;
 use alloy::primitives::U256;
-use std::collections::HashMap;
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 #[async_trait]
 pub(crate) trait ChainStateProvider {
@@ -45,7 +45,7 @@ fn calculate_trades(chain_id: u64, states: &HashMap<u64, ChainState>) -> Vec<Tra
         .transfers;
 
     for transfer in transfers {
-        solve(&transfer, &mut trades, &mut owned_states);
+        solve(transfer, &mut trades, &mut owned_states);
     }
 
     trades
@@ -80,7 +80,7 @@ fn solve(transfer_request: &Transfer, trades: &mut Vec<Trade>, states: &mut Hash
     }
 
     let transfer_amount = amount - solverFee - swapFee;
-    if dest_state.token_balance < transfer_amount{
+    if dest_state.token_balance < transfer_amount {
         return;
     }
 
@@ -105,10 +105,10 @@ mod tests {
     use crate::solver::{ChainStateProvider, Solver, calculate_trades};
     use crate::util::test::{generate_address, generate_request_id};
     use alloy::primitives::{Address, U256, address};
+    use async_trait::async_trait;
     use speculoos::assert_that;
     use speculoos::vec::VecAssertions;
     use std::collections::HashMap;
-    use async_trait::async_trait;
 
     static USER_ADDR: Address = address!("0xdeadbeef6964af9d7eed9e03e53415d37aa96045");
     static TOKEN_ADDR: Address = address!("0xd8da6bf26964af9d7eed9e03e53415d37aa96045");
@@ -472,9 +472,7 @@ mod tests {
 
         // then
         assert_that!(trades).has_length(1);
-
     }
-
 
     fn create_transfer_params(sender: Address, src_chain_id: u64, dest_chain_id: u64, amount: u64) -> Transfer {
         Transfer {

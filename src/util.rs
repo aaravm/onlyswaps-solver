@@ -6,10 +6,10 @@ pub fn normalise_chain_id(chain_id: U256) -> u64 {
 
 #[cfg(test)]
 pub(crate) mod test {
+    use crate::model::RequestId;
     use alloy::primitives::Address;
     use std::fs::File;
     use std::io::Read;
-    use crate::model::RequestId;
 
     pub fn generate_request_id() -> RequestId {
         let mut buf = [0u8; 32];

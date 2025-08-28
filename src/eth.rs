@@ -1,6 +1,7 @@
 use alloy::sol;
 
 sol!(
+    #[allow(clippy::too_many_arguments)]
     #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     #[sol(rpc)]
     ERC20FaucetToken,
@@ -8,6 +9,7 @@ sol!(
 );
 
 sol!(
+    #[allow(clippy::too_many_arguments)]
     #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     #[sol(rpc)]
     Router,
