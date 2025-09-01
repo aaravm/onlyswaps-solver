@@ -1,13 +1,13 @@
 {
   "networks": [{
-    "chain_id": 1337,
-    "rpc_url": "ws://localhost:1337",
-    "rusd_address": "0x46D346f8d9582f8963110108A7988B1a0bB3668D",
-    "router_address": "0xD10fdc7B6E049Ee482a1C202dB996eC4fFA36370"
+    "chain_id": 31337,
+    "rpc_url": "ws://localhost:31337",
+    "rusd_address": "0xEFdbe33D9014FFde884Bf055D5202e3851213805",
+    "router_address": "0x3d86B64a0f09Ca611edbcfB68309dFdEed87Ad89"
   }, {
     "chain_id": 1338,
     "rpc_url": "ws://localhost:1338",
-    "rusd_address": "0x46D346f8d9582f8963110108A7988B1a0bB3668D",
-    "router_address": "0xD10fdc7B6E049Ee482a1C202dB996eC4fFA36370"
+    "rusd_address": "0xEFdbe33D9014FFde884Bf055D5202e3851213805",
+    "router_address": "0x3d86B64a0f09Ca611edbcfB68309dFdEed87Ad89"
   }]
 }
