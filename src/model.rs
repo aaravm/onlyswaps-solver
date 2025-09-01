@@ -1,4 +1,4 @@
-use crate::eth::IRouter::TransferParams;
+use crate::eth::IRouter::SwapRequestParameters;
 use alloy::primitives::{Address, U256};
 
 pub type RequestId = [u8; 32];
@@ -14,7 +14,7 @@ pub struct ChainState {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Transfer {
     pub request_id: RequestId,
-    pub params: TransferParams,
+    pub params: SwapRequestParameters,
 }
 
 impl From<&Transfer> for Trade {

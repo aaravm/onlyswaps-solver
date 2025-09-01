@@ -1,4 +1,4 @@
-use crate::eth::IRouter::TransferParams;
+use crate::eth::IRouter::SwapRequestParameters;
 use crate::model::{ChainState, Trade, Transfer};
 use crate::util::normalise_chain_id;
 use alloy::primitives::U256;
@@ -52,7 +52,7 @@ fn calculate_trades(chain_id: u64, states: &HashMap<u64, ChainState>) -> Vec<Tra
 }
 
 fn solve(transfer_request: &Transfer, trades: &mut Vec<Trade>, states: &mut HashMap<u64, ChainState>) {
-    let TransferParams {
+    let SwapRequestParameters {
         dstChainId,
         token,
         amount,
@@ -100,7 +100,7 @@ fn solve(transfer_request: &Transfer, trades: &mut Vec<Trade>, states: &mut Hash
 
 #[cfg(test)]
 mod tests {
-    use crate::eth::IRouter::TransferParams;
+    use crate::eth::IRouter::SwapRequestParameters;
     use crate::model::{ChainState, Trade, Transfer};
     use crate::solver::{ChainStateProvider, Solver, calculate_trades};
     use crate::util::test::{generate_address, generate_request_id};
@@ -477,7 +477,7 @@ mod tests {
     fn create_transfer_params(sender: Address, src_chain_id: u64, dest_chain_id: u64, amount: u64) -> Transfer {
         Transfer {
             request_id: generate_request_id(),
-            params: TransferParams {
+            params: SwapRequestParameters {
                 srcChainId: U256::from(src_chain_id),
                 dstChainId: U256::from(dest_chain_id),
                 sender,
