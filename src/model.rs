@@ -20,12 +20,12 @@ pub struct Transfer {
 impl From<&Transfer> for Trade {
     fn from(transfer: &Transfer) -> Self {
         Trade {
-            token_addr: transfer.params.token,
+            token_addr: transfer.params.tokenOut,
             src_chain_id: transfer.params.srcChainId,
             dest_chain_id: transfer.params.dstChainId,
             recipient_addr: transfer.params.recipient,
             request_id: transfer.request_id,
-            swap_amount: transfer.params.amount - transfer.params.solverFee - transfer.params.swapFee,
+            swap_amount: transfer.params.amountOut,
         }
     }
 }
