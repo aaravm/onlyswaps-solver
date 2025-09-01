@@ -13,7 +13,7 @@ COPY ./onlysubs-solidity/package-lock.json ./
 RUN npm install
 
 COPY ./onlysubs-solidity ./
-RUN FOUNDRY_PROFILE=build forge install --no-git && FOUNDRY_PROFILE=build forge build
+RUN npm run build
 
 FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 WORKDIR /app
