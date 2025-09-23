@@ -17,7 +17,7 @@ ROUTER=0xD10fdc7B6E049Ee482a1C202dB996eC4fFA36370
 
 # mint some tokens on this chain
 echo "minting tokens"
-cast send $RUSD "mint(address, uint256)" $ME 10000 --rpc-url "$RPC_URL" --private-key $PRIVATE_KEY
+cast send $RUSD "mint()" $ME --rpc-url "$RPC_URL" --private-key $PRIVATE_KEY
 
 # enable transferring to other chain
 echo "enabling destination chain"
