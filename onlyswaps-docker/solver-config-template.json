@@ -1,0 +1,13 @@
+{
+  "networks": [{
+    "chain_id": 31337,
+    "rpc_url": "ws://anvil_1:31337",
+    "rusd_address": "${RUSD_ADDRESS}",
+    "router_address": "${ROUTER_ADDRESS}"
+  }, {
+    "chain_id": 43113,
+    "rpc_url": "ws://anvil_2:43113",
+    "rusd_address": "${RUSD_ADDRESS}",
+    "router_address": "${ROUTER_ADDRESS}"
+  }]
+}
