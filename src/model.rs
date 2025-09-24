@@ -28,6 +28,27 @@ impl DutchAuction {
         }
     }
 
+    // New constructor for slippage-based auctions
+    pub fn new_slippage_based(amount: U256, slippage: U256, expected_blocks: u64) -> Self {
+        let start_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        println!("Initial amount is: {}", amount);
+        // Calculate minAllowedCost = (1 - slippage) * amount
+        // Assuming slippage is in basis points (e.g., 100 = 1%)
+        let slippage_bps = U256::from(10000); // 100%
+        let min_allowed_cost = amount * (slippage_bps - slippage) / slippage_bps;
+        
+        // Start price = 3 * minAllowedCost
+        let start_fee = min_allowed_cost * U256::from(3);
+        
+        Self {
+            start_time,
+            end_time: start_time + expected_blocks, // Using blocks instead of seconds
+            start_fee,
+            reserve_fee: min_allowed_cost, // Reserve price is minAllowedCost
+            current_fee: start_fee,
+        }
+    }
+
     pub fn update_current_fee(&mut self) -> U256 {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
         
@@ -48,6 +69,37 @@ impl DutchAuction {
         
         // Fix: Convert everything to U256 for multiplication and division
         self.current_fee = self.start_fee - (fee_drop * elapsed / total_duration);
+        self.current_fee
+    }
+
+    // New method for block-based price updates with custom step size
+    pub fn update_current_fee_by_blocks(&mut self, current_block: u64) -> U256 {
+        if current_block >= self.end_time {
+            self.current_fee = self.reserve_fee;
+            return self.current_fee;
+        }
+
+        let start_block = self.start_time; // Repurposing start_time as start_block
+        if current_block <= start_block {
+            self.current_fee = self.start_fee;
+            return self.current_fee;
+        }
+
+        // Calculate price decrease per block
+        // Price decreases by (2 * minAllowedCost / expected_blocks) per block
+        let min_allowed_cost = self.reserve_fee;
+        let total_blocks = self.end_time - start_block;
+        let price_decrease_per_block = (min_allowed_cost * U256::from(2)) / U256::from(total_blocks);
+        
+        let blocks_elapsed = current_block - start_block;
+        let total_decrease = price_decrease_per_block * U256::from(blocks_elapsed);
+        
+        if total_decrease >= self.start_fee - self.reserve_fee {
+            self.current_fee = self.reserve_fee;
+        } else {
+            self.current_fee = self.start_fee - total_decrease;
+        }
+        
         self.current_fee
     }
 

@@ -52,16 +52,14 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
         // Start auctions for new transfers
         self.start_auctions_for_new_transfers(chain_id);
         
-        // Calculate trades for both known chains
+        // Calculate trades for all known chains
         let mut all_trades = Vec::new();
         
-        // Check chain 31337
-        let mut chain_31337_trades = self.calculate_trades_internal(31337, in_flight);
-        all_trades.append(&mut chain_31337_trades);
-        
-        // Check chain 43113
-        let mut chain_43113_trades = self.calculate_trades_internal(43113, in_flight);
-        all_trades.append(&mut chain_43113_trades);
+        // Check all configured chains
+        for &chain_id in self.chains.keys() {
+            let mut chain_trades = self.calculate_trades_internal(chain_id, in_flight);
+            all_trades.append(&mut chain_trades);
+        }
         
         Ok(all_trades)
     }
@@ -97,14 +95,17 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
             if let Some(dest_state) = self.states.get_mut(&dest_chain_id) {
                 // Check if this is a new transfer (auction doesn't exist yet)
                 if !dest_state.active_auctions.contains_key(&transfer.request_id) {
-                    let auction = DutchAuction::new(
-                        transfer.params.solverFee,
-                        60, // 60 seconds duration
-                        3.0 // 3x multiplier
+                    // Use slippage-based auction: solverFee is now slippage tolerance
+                    let expected_blocks = 60; // Expected number of blocks for the auction
+                    let auction = DutchAuction::new_slippage_based(
+                        transfer.params.amountOut, // Token amount
+                        transfer.params.solverFee, // Slippage tolerance (repurposed)
+                        expected_blocks
                     );
-                    println!("🚀 Started Dutch auction for request {:?} on DESTINATION chain {}", 
+                    println!("🚀 Started slippage-based Dutch auction for request {:?} on DESTINATION chain {}", 
                         transfer.request_id, dest_chain_id);
-                    println!("   Start price: {}, Reserve price: {}", 
+                    println!("   Amount: {}, Slippage: {}", transfer.params.amountOut, transfer.params.solverFee);
+                    println!("   Start price: {}, Reserve price (minAllowedCost): {}", 
                         auction.start_fee, auction.reserve_fee);
                     
                     dest_state.active_auctions.insert(transfer.request_id, auction);
@@ -197,8 +198,10 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
             return;
         }
 
-        if solverFee < U256::from(1) {
-            println!("❌ SolverFee too low: {}, returning", solverFee);
+        // Validate slippage tolerance (solverFee is now slippage in basis points)
+        // Slippage should be between 0 and 10000 (0% to 100%)
+        if solverFee > U256::from(10000) {
+            println!("❌ Slippage tolerance too high: {} bps (max 10000), returning", solverFee);
             return;
         }
 
@@ -213,30 +216,36 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
         println!("   already_fulfilled: {}", dest_state.already_fulfilled.contains(&transfer_request.request_id));
         println!("   native_balance: {}", dest_state.native_balance);
         println!("   token_balance: {} (needed: {})", dest_state.token_balance, amountOut);
-        println!("   solverFee: {}", solverFee);
+        println!("   slippage_tolerance_bps: {}", solverFee);
         println!("   tokenOut matches: {}", tokenOut == dest_state.token_addr);
 
-        // Dutch Auction Logic - NOW IT WILL WORK!
+        // Slippage-based Dutch Auction Logic
         let (current_price, should_execute) = if let Some(auction) = dest_state.active_auctions.get_mut(&transfer_request.request_id) {
-            println!("🎯 Found auction for {:?} on destination chain!", transfer_request.request_id);
+            println!("🎯 Found slippage-based auction for {:?} on destination chain!", transfer_request.request_id);
             let current_price = auction.update_current_fee();
             
-            let execution_threshold = solverFee * U256::from(2);
+            // New execution threshold: 2 * minAllowedCost (reserve_fee is minAllowedCost)
+            let min_allowed_cost = auction.reserve_fee;
+            let execution_threshold = min_allowed_cost * U256::from(2);
             let should_execute = current_price <= execution_threshold;
             
-            println!("💰 Auction {:?} - Current price: {}, Threshold: {}, Execute: {}", 
-                transfer_request.request_id, current_price, execution_threshold, should_execute);
+            println!("💰 Slippage Auction {:?} - Current price: {}, MinAllowedCost: {}, Threshold (2x): {}, Execute: {}", 
+                transfer_request.request_id, current_price, min_allowed_cost, execution_threshold, should_execute);
             
             if auction.is_expired() {
-                println!("⏰ Auction {:?} expired, executing at reserve price", transfer_request.request_id);
+                println!("⏰ Auction {:?} expired, executing at minAllowedCost", transfer_request.request_id);
                 (auction.reserve_fee, true)
             } else {
                 (current_price, should_execute)
             }
         } else {
             println!("❌ No auction found for {:?} on destination chain {}", transfer_request.request_id, normalise_chain_id(dstChainId));
-            println!("📈 Using fixed fee: {}", solverFee);
-            (solverFee, true)
+            // Fallback: treat solverFee as slippage and calculate minAllowedCost directly
+            let slippage_bps = U256::from(10000);
+            let min_allowed_cost = amountOut * (slippage_bps - solverFee) / slippage_bps;
+            println!("📈 Using fallback slippage calculation - Amount: {}, Slippage: {}, MinAllowedCost: {}", 
+                amountOut, solverFee, min_allowed_cost);
+            (min_allowed_cost, true)
         };
 
         if !should_execute {
@@ -269,6 +278,7 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
             
             for transfer in &transfers {
                 if !state.active_auctions.contains_key(&transfer.request_id) {
+                    // Keep old logic for backward compatibility in tests
                     let auction = DutchAuction::new(
                         transfer.params.solverFee,
                         60,
@@ -372,6 +382,7 @@ mod tests {
             token_balance: U256::from(1),
             transfers: vec![transfer_params.clone()],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let chain_two_state = ChainState {
             token_addr: TOKEN_ADDR,
@@ -379,6 +390,7 @@ mod tests {
             token_balance: U256::from(1000),
             transfers: Vec::default(),
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let chain_one = StubbedChain { state: chain_one_state };
         let chain_two = StubbedChain { state: chain_two_state };
@@ -397,6 +409,7 @@ mod tests {
             dest_chain_id: transfer_params.params.dstChainId,
             recipient_addr: transfer_params.params.recipient,
             swap_amount: expected_output_amount,
+            auction_price: U256::from(1), // Default solver fee from test
         };
         assert_that!(trades).has_length(1);
         assert_that!(trades[0]).is_equal_to(expected_trade);
@@ -415,6 +428,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![transfer_params, transfer_params_2],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         // on dst_chain, we only have enough balance to cover one tx
         let dst_chain_state = ChainState {
@@ -423,6 +437,7 @@ mod tests {
             token_balance: U256::from(200),
             transfers: vec![],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -446,6 +461,7 @@ mod tests {
             token_balance: U256::from(100),
             transfers: vec![transfer_params],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         // on dst_chain, we only have enough balance to cover one tx
         let dst_chain_state = ChainState {
@@ -454,6 +470,7 @@ mod tests {
             token_balance: U256::from(200),
             transfers: vec![transfer_params_2],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -473,6 +490,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
@@ -480,6 +498,7 @@ mod tests {
             token_balance: U256::from(1000),
             transfers: vec![],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -499,6 +518,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![create_transfer_params(USER_ADDR, 1, 2, 100)],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
@@ -506,6 +526,7 @@ mod tests {
             token_balance: U256::from(1000),
             transfers: vec![],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -525,6 +546,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![create_transfer_params(USER_ADDR, 1, 2, 100)],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
@@ -532,6 +554,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -554,6 +577,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![transfer_params],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
@@ -561,6 +585,7 @@ mod tests {
             token_balance: U256::from(1000),
             transfers: vec![],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -583,6 +608,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![transfer_params],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
@@ -590,6 +616,7 @@ mod tests {
             token_balance: U256::from(1000),
             transfers: vec![],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -612,6 +639,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![transfer_params],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
@@ -619,6 +647,7 @@ mod tests {
             token_balance: U256::from(1000),
             transfers: vec![],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -642,6 +671,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![transfer_params, transfer_params_2],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         // on dst_chain, we only have enough balance to cover one tx
         let dst_chain_state = ChainState {
@@ -650,6 +680,7 @@ mod tests {
             token_balance: U256::from(150),
             transfers: vec![],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -672,6 +703,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![transfer_params.clone()],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         // on dst_chain, we only have enough balance to cover one tx
         let dst_chain_state = ChainState {
@@ -680,6 +712,7 @@ mod tests {
             token_balance: U256::from(150),
             transfers: vec![],
             already_fulfilled: vec![transfer_params.request_id],
+            active_auctions: HashMap::new(),
         };
         let state = HashMap::from([(1, src_chain_state), (2, dst_chain_state)]);
 
@@ -702,6 +735,7 @@ mod tests {
             token_balance: U256::from(0),
             transfers: vec![transfer_params.clone()],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         let dst_chain_state = ChainState {
             token_addr: TOKEN_ADDR,
@@ -709,6 +743,7 @@ mod tests {
             token_balance: U256::from(200),
             transfers: vec![],
             already_fulfilled: vec![],
+            active_auctions: HashMap::new(),
         };
         // we create a cache that already has the request_id in it
         let cache = Cache::new(1);
@@ -735,7 +770,7 @@ mod tests {
                 tokenOut: TOKEN_ADDR,
                 amountOut: U256::from(amount),
                 verificationFee: U256::from(2),
-                solverFee: U256::from(1),
+                solverFee: U256::from(5000), // 50% slippage to make execution more likely in tests
                 nonce: U256::from(100),
                 executed: false,
                 requestedAt: U256::from(12345),
