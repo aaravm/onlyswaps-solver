@@ -20,7 +20,7 @@ First retrieve and build submodules with `./build-dependencies.sh` then run `car
 - Start two anvil blockchains (note: block time is necessary or chain state can get confused):
   ```bash
   $ anvil --port 31337 --chain-id 31337 --block-time 3
-  $ anvil --port 31338 --chain-id 31338 --block-time 3
+  $ anvil --port 43113 --chain-id 43113 --block-time 3
   ```
 
 - Deploy the contracts from onlyswaps-solidity by:
@@ -35,13 +35,13 @@ First retrieve and build submodules with `./build-dependencies.sh` then run `car
     ```
   - `source .env`
   - `$ forge script script/onlyswaps/DeployAllContracts.s.sol --broadcast --rpc-url http://127.0.0.1:31337 --private-key $PRIVATE_KEY` 
-  - `$ forge script script/onlyswaps/DeployAllContracts.s.sol --broadcast --rpc-url http://127.0.0.1:31338 --private-key $PRIVATE_KEY`
+  - `$ forge script script/onlyswaps/DeployAllContracts.s.sol --broadcast --rpc-url http://127.0.0.1:43113 --private-key $PRIVATE_KEY`
  
 - Run the agent configured with the [local config](./config-local.json) and the second anvil key:
 `$ cargo run -- --config ./config-local.json --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d`
  
 - request a swap a monitor the logs for it happening:
-`$ ./request-swap.sh 31337 31338`
+`$ ./request-swap.sh 31337 43113`
  
 - you can also swap in the other direction:
-`$ ./request-swap.sh 31338 31337`
+`$ ./request-swap.sh 43113 31337`

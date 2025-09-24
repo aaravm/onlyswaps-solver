@@ -1,5 +1,5 @@
 ARG NODE_VERSION=22.3
-FROM europe-west1-docker.pkg.dev/randamu-prod/candyland/node:${NODE_VERSION} AS sol_builder
+FROM node:${NODE_VERSION} AS sol_builder
 WORKDIR /app
 
 RUN curl -L https://foundry.paradigm.xyz | bash

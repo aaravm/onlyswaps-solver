@@ -107,7 +107,11 @@ impl ChainStateProvider for Network<DynProvider> {
         let unfulfilled = self.router.getUnfulfilledSolverRefunds().call().await?;
         let reqs = unfulfilled.into_iter().map(async |id| -> eyre::Result<Transfer> {
             let params = self.router.getSwapRequestParameters(id).call().await?;
-            Ok(Transfer { request_id: *id, params })
+            Ok(Transfer { 
+                request_id: *id, 
+                params,
+                // auction: None, // Will be set by solver
+            })
         });
         let transfers = try_join_all(reqs).await?;
 
@@ -117,6 +121,7 @@ impl ChainStateProvider for Network<DynProvider> {
             token_balance,
             transfers,
             already_fulfilled,
+            active_auctions: HashMap::new(), // Initialize empty
         })
     }
 }

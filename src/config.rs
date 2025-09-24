@@ -11,7 +11,7 @@ pub(crate) struct CliArgs {
     #[arg(short = 's', long = "private-key", env = "SOLVER_PRIVATE_KEY")]
     pub private_key: String,
 
-    #[arg(short = 'p', long = "port", env = "SOLVER_PORT", default_value = "8080")]
+    #[arg(short = 'p', long = "port", env = "SOLVER_PORT", default_value = "8081")]
     pub port: u16,
 }
 
