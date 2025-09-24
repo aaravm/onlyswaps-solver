@@ -67,7 +67,7 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
         
         // Check all configured chains
         for &chain_id in self.chains.keys() {
-            let mut chain_trades = self.calculate_trades_internal(chain_id, in_flight);
+            let mut chain_trades = self.calculate_trades_internal(chain_id, in_flight).await;
             all_trades.append(&mut chain_trades);
         }
         
@@ -131,7 +131,7 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
         }
     }
     // New internal method that works with self.states directly
-    fn calculate_trades_internal(&mut self, chain_id: u64, in_flight: &Cache<RequestId, ()>) -> Vec<Trade> {
+    async fn calculate_trades_internal(&mut self, chain_id: u64, in_flight: &Cache<RequestId, ()>) -> Vec<Trade> {
         let mut trades = Vec::new();
         
         println!("🔄 Checking chain {} for trades", chain_id);
@@ -152,7 +152,7 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
             }
             
             // Call solve with direct access to self.states (no cloning!)
-            self.solve_internal(&transfer, &mut trades);
+            self.solve_internal(&transfer, &mut trades).await;
         }
 
         println!("🎯 Generated {} trades from chain {}", trades.len(), chain_id);
@@ -160,7 +160,7 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
     }
 
     // New solve method that works with self.states directly
-    fn solve_internal(&mut self, transfer_request: &Transfer, trades: &mut Vec<Trade>) {
+    async fn solve_internal(&mut self, transfer_request: &Transfer, trades: &mut Vec<Trade>) {
         let SwapRequestParameters {
             dstChainId,
             tokenOut,
@@ -239,7 +239,20 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
         // Slippage-based Dutch Auction Logic
         let (current_price, should_execute) = if let Some(auction) = dest_state.active_auctions.get_mut(&transfer_request.request_id) {
             println!("🎯 Found slippage-based auction for {:?} on destination chain!", transfer_request.request_id);
-            let current_price = auction.update_current_fee();
+            
+            // Try to fetch randomness from drand, fallback to deterministic if it fails
+            let randomness = match crate::drand::DrandRandomness::new().get_normalized_random().await {
+                Ok(r) => {
+                    println!("🎲 Using drand randomness: {:.6}", r);
+                    r
+                }
+                Err(e) => {
+                    println!("⚠️ Drand failed ({}), using deterministic pricing", e);
+                    0.5 // Fallback to 50% randomness (1x normal decay)
+                }
+            };
+            
+            let current_price = auction.update_current_fee_with_randomness(randomness);
             
             // Fixed threshold calculation: Use auction start_fee with diminishing thresholds
             // Higher threshold_multiplier = willing to pay closer to start price = more aggressive

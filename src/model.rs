@@ -62,13 +62,45 @@ impl DutchAuction {
             return self.current_fee;
         }
 
-        // Linear decay from start_fee to reserve_fee over time
+        // Linear decay from start_fee to reserve_fee over time (deterministic)
         let elapsed = U256::from(now - self.start_time);
         let total_duration = U256::from(self.end_time - self.start_time);
         let fee_drop = self.start_fee - self.reserve_fee;
-        
-        // Fix: Convert everything to U256 for multiplication and division
+
         self.current_fee = self.start_fee - (fee_drop * elapsed / total_duration);
+        self.current_fee
+    }
+
+    // New method that accepts randomness as a parameter (for drand integration)
+    pub fn update_current_fee_with_randomness(&mut self, randomness: f64) -> U256 {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        
+        if now >= self.end_time {
+            self.current_fee = self.reserve_fee;
+            return self.current_fee;
+        }
+
+        if now <= self.start_time {
+            self.current_fee = self.start_fee;
+            return self.current_fee;
+        }
+
+        // Linear decay with randomness applied
+        let elapsed = U256::from(now - self.start_time);
+        let total_duration = U256::from(self.end_time - self.start_time);
+        let base_fee_drop = self.start_fee - self.reserve_fee;
+
+        // Apply randomness: scale by 0 to 2x based on normalized random value [0,1)
+        let rnd_scaled_u64 = ((randomness * 2.0 * 1_000_000.0).round() as u64).min(2_000_000);
+        let rnd_u256 = U256::from(rnd_scaled_u64);
+
+        let randomized_fee_drop = base_fee_drop * rnd_u256 / U256::from(10_000_000u64);
+
+        self.current_fee = self.start_fee - (randomized_fee_drop * elapsed / total_duration);
+        
+        println!("🎲 Time-based randomness: {:.6}, Scaled: {}, Fee drop: {}", 
+                randomness, rnd_scaled_u64, randomized_fee_drop);
+        
         self.current_fee
     }
 

@@ -7,6 +7,7 @@ mod model;
 mod network;
 mod solver;
 mod util;
+mod drand;
 
 use crate::api::ApiServer;
 use crate::app::App;
