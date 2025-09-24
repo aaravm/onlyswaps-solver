@@ -15,16 +15,46 @@ services:
     ports:
       - "43113:43113"
 
-  solver:
+  solver_1:
     platform: linux/x86_64
     # image: ghcr.io/randa-mu/onlyswaps-solver:master-latest
     build:
       context: ../
-    entrypoint: /usr/local/bin/onlyswaps-solver --config /mnt/solver-config.json --private-key 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6
+    entrypoint: /usr/local/bin/onlyswaps-solver --config /mnt/solver-config.json --private-key 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6 --port 8080 --solver-id 1
     volumes:
       - "./build:/mnt"
     ports:
       - "8080:8080"
+    restart: always
+    depends_on:
+      - anvil_1
+      - anvil_2
+
+  solver_2:
+    platform: linux/x86_64
+    # image: ghcr.io/randa-mu/onlyswaps-solver:master-latest
+    build:
+      context: ../
+    entrypoint: /usr/local/bin/onlyswaps-solver --config /mnt/solver-config.json --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d --port 8081 --solver-id 2
+    volumes:
+      - "./build:/mnt"
+    ports:
+      - "8081:8081"
+    restart: always
+    depends_on:
+      - anvil_1
+      - anvil_2
+
+  solver_3:
+    platform: linux/x86_64
+    # image: ghcr.io/randa-mu/onlyswaps-solver:master-latest
+    build:
+      context: ../
+    entrypoint: /usr/local/bin/onlyswaps-solver --config /mnt/solver-config.json --private-key 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a --port 8082 --solver-id 3
+    volumes:
+      - "./build:/mnt"
+    ports:
+      - "8082:8082"
     restart: always
     depends_on:
       - anvil_1

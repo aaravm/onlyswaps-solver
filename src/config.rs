@@ -2,6 +2,7 @@ use clap::Parser;
 use serde::Deserialize;
 use shellexpand::tilde;
 use std::fs;
+use alloy::primitives::U256;
 
 #[derive(Parser, Debug)]
 pub(crate) struct CliArgs {
@@ -13,11 +14,21 @@ pub(crate) struct CliArgs {
 
     #[arg(short = 'p', long = "port", env = "SOLVER_PORT", default_value = "8081")]
     pub port: u16,
+
+    #[arg(short = 'i', long = "solver-id", env = "SOLVER_ID", default_value = "1")]
+    pub solver_id: u8,
 }
 
 #[derive(Deserialize, Debug, Clone)]
 pub(crate) struct ConfigFile {
     pub networks: Vec<NetworkConfig>,
+    pub solver_config: Option<SolverConfig>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub(crate) struct SolverConfig {
+    pub threshold_multiplier: f64, // Multiplier for min_allowed_cost (e.g., 2.0 = 2x threshold)
+    pub solver_name: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]

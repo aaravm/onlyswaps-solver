@@ -49,4 +49,4 @@ cast send $RUSD "approve(address, uint256)" $ROUTER 101ether --rpc-url "$RPC_URL
 
 # send the money to the bridge
 echo "making bridge request"
-cast send -vvvv $ROUTER "requestCrossChainSwap(address, address, uint256, uint256, uint256, address)" $RUSD $RUSD 100ether 0.01 "$OTHER_CHAIN_ID" $ADDRESS --rpc-url "$RPC_URL" --private-key $PRIVATE_KEY
+cast send -vvvv $ROUTER "requestCrossChainSwap(address, address, uint256, uint256, uint256, address)" $RUSD $RUSD 100ether 100 "$OTHER_CHAIN_ID" $ADDRESS --rpc-url "$RPC_URL" --private-key $PRIVATE_KEY

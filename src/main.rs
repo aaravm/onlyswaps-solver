@@ -30,7 +30,7 @@ async fn main() -> eyre::Result<()> {
 
     // listen for alllll the things!
     tokio::select! {
-        res = App::start(networks) => {
+        res = App::start(networks, &config, cli.solver_id) => {
             match res {
                 Ok(_) => Err(eyre!("event listener stopped unexpectedly")),
                 Err(e) => Err(eyre!("event listener stopped unexpectedly: {}", e))

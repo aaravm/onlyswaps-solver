@@ -16,9 +16,11 @@ pub(crate) struct Solver<'a, CSP> {
     chains: &'a HashMap<u64, CSP>,
     initial_transfers: HashMap<u64, Vec<RequestId>>, // Track transfers that existed at startup
     demo_mode: bool, // Allow processing of pre-fulfilled transfers for demo purposes
+    threshold_multiplier: f64, // Configurable threshold multiplier for this solver
+    solver_name: String, // Name/ID for this solver instance
 }
 impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
-    pub async fn from(chains: &'a HashMap<u64, CSP>) -> eyre::Result<Self> {
+    pub async fn from(chains: &'a HashMap<u64, CSP>, threshold_multiplier: f64, solver_name: String) -> eyre::Result<Self> {
         let mut states: HashMap<u64, ChainState> = HashMap::new();
         let mut initial_transfers: HashMap<u64, Vec<RequestId>> = HashMap::new();
 
@@ -35,7 +37,15 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
             states.insert(*chain_id, state);
         }
 
-        Ok(Self { states, chains, initial_transfers, demo_mode: true })
+        println!("🔧 Initialized solver '{}' with threshold multiplier: {}x", solver_name, threshold_multiplier);
+        Ok(Self { 
+            states, 
+            chains, 
+            initial_transfers, 
+            demo_mode: true,
+            threshold_multiplier,
+            solver_name,
+        })
     }
     pub async fn fetch_state(&mut self, chain_id: u64, in_flight: &Cache<RequestId, ()>) -> eyre::Result<Vec<Trade>> {
         let chain = self.chains.get(&chain_id).expect("somehow got event for a non-existent chain");
@@ -77,6 +87,13 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
         self.demo_mode = enabled;
         println!("🎮 Demo mode {}", if enabled { "enabled" } else { "disabled" });
     }
+    
+    /// Refresh blockchain state for a specific chain to detect completed trades
+    pub async fn refresh_chain_state(&mut self, chain_id: u64) -> eyre::Result<()> {
+        // For now, just call fetch_state without returning trades to refresh internal state
+        let _ = self.fetch_state(chain_id, &moka::sync::Cache::new(1000)).await?;
+        Ok(())
+    }
 
     // Fixed method - creates auctions on destination chains, not source chains
     fn start_auctions_for_new_transfers(&mut self, chain_id: u64) {
@@ -96,7 +113,7 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
                 // Check if this is a new transfer (auction doesn't exist yet)
                 if !dest_state.active_auctions.contains_key(&transfer.request_id) {
                     // Use slippage-based auction: solverFee is now slippage tolerance
-                    let expected_blocks = 60; // Expected number of blocks for the auction
+                    let expected_blocks = 120; // Extended duration for better competition
                     let auction = DutchAuction::new_slippage_based(
                         transfer.params.amountOut, // Token amount
                         transfer.params.solverFee, // Slippage tolerance (repurposed)
@@ -224,13 +241,29 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
             println!("🎯 Found slippage-based auction for {:?} on destination chain!", transfer_request.request_id);
             let current_price = auction.update_current_fee();
             
-            // New execution threshold: 2 * minAllowedCost (reserve_fee is minAllowedCost)
+            // Fixed threshold calculation: Use auction start_fee with diminishing thresholds
+            // Higher threshold_multiplier = willing to pay closer to start price = more aggressive
+            let start_fee = auction.start_fee;
             let min_allowed_cost = auction.reserve_fee;
-            let execution_threshold = min_allowed_cost * U256::from(2);
+            let price_range = start_fee.saturating_sub(min_allowed_cost);
+            
+            // CORRECTED: Lower multiplier = smaller percentage down = more aggressive
+            // AggressiveSolver (1.1): 10% down from start = executes early at high price
+            // ModerateSolver (1.5): 33% down from start  
+            // ConservativeSolver (2.0): 50% down from start = waits for lower prices
+            let percentage_down = if self.threshold_multiplier <= 1.2 {
+                U256::from(10)  // 1.1x - very aggressive (10% down)
+            } else if self.threshold_multiplier <= 1.7 {
+                U256::from(33)  // 1.5x - moderate (33% down)
+            } else {
+                U256::from(50)  // 2.0x - conservative (50% down)
+            };
+            let execution_threshold = start_fee.saturating_sub((price_range * percentage_down) / U256::from(100));
             let should_execute = current_price <= execution_threshold;
             
-            println!("💰 Slippage Auction {:?} - Current price: {}, MinAllowedCost: {}, Threshold (2x): {}, Execute: {}", 
-                transfer_request.request_id, current_price, min_allowed_cost, execution_threshold, should_execute);
+            println!("💰 Solver '{}' Auction {:?} - Current price: {}, StartFee: {}, MinAllowedCost: {}, Threshold ({}x = {}% down): {}, Execute: {}", 
+                self.solver_name, transfer_request.request_id, current_price, start_fee, min_allowed_cost,
+                self.threshold_multiplier, percentage_down, execution_threshold, should_execute);
             
             if auction.is_expired() {
                 println!("⏰ Auction {:?} expired, executing at minAllowedCost", transfer_request.request_id);
@@ -249,11 +282,18 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
         };
 
         if !should_execute {
-            println!("❌ Not executing trade {:?} - price too high", transfer_request.request_id);
+            println!("❌ Solver '{}' not executing trade {:?} - price too high", self.solver_name, transfer_request.request_id);
             return;
         }
 
-        println!("✅ Executing trade {:?} at price {}", transfer_request.request_id, current_price);
+        // 🚨 CRITICAL: Last-second check to prevent double execution
+        // Double-check if trade was just executed by another solver
+        if dest_state.already_fulfilled.contains(&transfer_request.request_id) {
+            println!("⚠️ Solver '{}' STOPPING execution - trade {:?} was just fulfilled by another solver!", self.solver_name, transfer_request.request_id);
+            return;
+        }
+
+        println!("✅ Solver '{}' executing trade {:?} at price {}", self.solver_name, transfer_request.request_id, current_price);
         
         dest_state.token_balance -= amountOut;
         
@@ -268,7 +308,13 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
         };
         
         trades.push(trade);
+        
+        // ✅ IMMEDIATE AUCTION CLEANUP: Mark transfer as fulfilled and remove auction
         dest_state.active_auctions.remove(&transfer_request.request_id);
+        dest_state.already_fulfilled.push(transfer_request.request_id);
+        
+        println!("🛑 Auction terminated for request {:?} - trade executed by {}", 
+            transfer_request.request_id, self.solver_name);
     }
 
     // Keep the old methods for backward compatibility with tests
@@ -397,7 +443,7 @@ mod tests {
         let networks = HashMap::from([(1, chain_one), (2, chain_two)]);
 
         // when
-        let mut solver = Solver::from(&networks).await.unwrap();
+        let mut solver = Solver::from(&networks, 2.0, "TestSolver".to_string()).await.unwrap();
         let trades = solver.fetch_state(chain_id, &Cache::new(1)).await.unwrap();
 
         // then
