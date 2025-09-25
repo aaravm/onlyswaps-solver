@@ -1,3 +1,4 @@
+#
 name: 'Rust Test Action'
 description: 'Runs format check, clippy, and tests for a Rust crate'
 inputs:
