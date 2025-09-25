@@ -11,7 +11,7 @@ clap = { version = "4.5.40", features = ["derive", "env"] }
 dotenv = "0.15.0"
 eyre = "0.6.12"
 futures = "0.3.31"
-hex = "0.4"
+hex = "0.4" 
 itertools = "0.10.5"
 moka = { version = "0.12.10", features = ["sync"] }
 num-bigint = "0.4"

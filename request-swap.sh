@@ -43,7 +43,7 @@ else
     echo "token mapping already exists, skipping"
 fi
 
-# allow the contract to spend our erc20s
+# allow the contract to spend our erc20s 
 echo "approving token spend"
 cast send $RUSD "approve(address, uint256)" $ROUTER 101ether --rpc-url "$RPC_URL" --private-key $PRIVATE_KEY
 
