@@ -32,7 +32,7 @@ Child contracts (like `Router`) inherit from `ScheduledUpgradeable` and can cust
 
 This repository comes with a comprehensive set of tests written in Solidity, which can be executed using [Foundry](https://getfoundry.sh/).
 
-To install Foundry:
+To install Foundry run:
 
 ```sh
 curl -L https://foundry.paradigm.xyz | bash
