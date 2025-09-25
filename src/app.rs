@@ -40,27 +40,27 @@ impl App {
         let mut inflight_requests: Cache<RequestId, ()> = Cache::builder().max_capacity(1000).time_to_live(Duration::from_secs(30)).build();
 
         while let Some(BlockEvent { chain_id, .. }) = stream.next().await {
-            // Add solver-specific delay to simulate real-world processing differences
-            let delay_ms = match solver_id {
-                1 => 0,   // AggressiveSolver: fastest processing (immediate)
-                2 => 100, // ModerateSolver: moderate delay  
-                3 => 250, // ConservativeSolver: significant delay
-                _ => 500,
-            };
-            if delay_ms > 0 {
-                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-            }
+            // // Add solver-specific delay to simulate real-world processing differences
+            // let delay_ms = match solver_id {
+            //     1 => 0,   // AggressiveSolver: fastest processing (immediate)
+            //     2 => 100, // ModerateSolver: moderate delay  
+            //     3 => 250, // ConservativeSolver: significant delay
+            //     _ => 500,
+            // };
+            // if delay_ms > 0 {
+            //     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+            // }
             
             let trades = solver.fetch_state(chain_id, &inflight_requests).await?;
             if !trades.is_empty() {
                 println!("executing {} trades from chain {}", trades.len(), chain_id);
                 executor.execute(trades, &mut inflight_requests).await;
                 
-                // ✅ IMMEDIATE STATE REFRESH: Update all solver states after execution
-                // This helps other solvers quickly detect completed trades
-                for &refresh_chain in networks.keys() {
-                    let _ = solver.refresh_chain_state(refresh_chain).await;
-                }
+                // // ✅ IMMEDIATE STATE REFRESH: Update all solver states after execution
+                // // This helps other solvers quickly detect completed trades
+                // for &refresh_chain in networks.keys() {
+                //     let _ = solver.refresh_chain_state(refresh_chain).await;
+                // }
             }
         }
 

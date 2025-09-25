@@ -134,8 +134,8 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
     async fn calculate_trades_internal(&mut self, chain_id: u64, in_flight: &Cache<RequestId, ()>) -> Vec<Trade> {
         let mut trades = Vec::new();
         
-        println!("🔄 Checking chain {} for trades", chain_id);
-        
+        println!("Checking chain {} for trades", chain_id);
+
         // Get transfers without cloning states
         let transfers = self.states
             .get(&chain_id)
@@ -143,11 +143,16 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
             .transfers
             .clone(); // Only clone transfers
 
-        println!("📋 Found {} transfers on chain {}", transfers.len(), chain_id);
+        // Only log when there are transfers to process
+        if !transfers.is_empty() {
+                    // Reduced verbosity - only log checking when needed
+            println!("Checking chain {} for trades...", chain_id);
+            println!("Found {} transfers on chain {}", transfers.len(), chain_id);
+        }
 
         for transfer in &transfers {
             if in_flight.contains_key(&transfer.request_id) {
-                println!("⏭️ Skipping transfer {:?} - already in flight", transfer.request_id);
+                println!("Skipping transfer {:?} - already in flight", transfer.request_id);
                 continue;
             }
             
@@ -155,7 +160,10 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
             self.solve_internal(&transfer, &mut trades).await;
         }
 
-        println!("🎯 Generated {} trades from chain {}", trades.len(), chain_id);
+        // Only log when trades are generated
+        if trades.len() > 0 {
+            println!("Generated {} trades from chain {}", trades.len(), chain_id);
+        }
         trades
     }
 
@@ -170,84 +178,84 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
             ..
         } = transfer_request.params;
 
-        println!("🔍 Processing transfer {:?} for destination chain {}", transfer_request.request_id, normalise_chain_id(dstChainId));
+        // println!(" Processing transfer {:?} for destination chain {}", transfer_request.request_id, normalise_chain_id(dstChainId));
 
         // Check if this is a new transfer before getting mutable borrow
         let is_new_transfer = self.is_new_transfer(normalise_chain_id(transfer_request.params.srcChainId), &transfer_request.request_id);
 
         let dest_state = match self.states.get_mut(&normalise_chain_id(dstChainId)) {
             None => {
-                println!("❌ Destination chain {} not found in states", normalise_chain_id(dstChainId));
+                println!(" Destination chain {} not found in states", normalise_chain_id(dstChainId));
                 return;
             }
             Some(state) => {
-                println!("✅ Found destination chain {} with {} auctions", normalise_chain_id(dstChainId), state.active_auctions.len());
+                println!(" Found destination chain {} with {} auctions", normalise_chain_id(dstChainId), state.active_auctions.len());
                 state
             }
         };
 
         if executed {
-            println!("❌ Transfer already executed, returning");
+            println!(" Transfer already executed, returning");
             return;
         }
 
         if dest_state.already_fulfilled.contains(&transfer_request.request_id) {
-            println!("⚠️ Transfer already fulfilled on blockchain (new_transfer: {}, demo_mode: {})", is_new_transfer, self.demo_mode);
+            println!(" Transfer already fulfilled on blockchain (new_transfer: {}, demo_mode: {})", is_new_transfer, self.demo_mode);
             
             if is_new_transfer && !self.demo_mode {
-                println!("❌ New transfer that was quickly fulfilled, skipping");
+                println!(" New transfer that was quickly fulfilled, skipping");
                 return;
             } else if !is_new_transfer && self.demo_mode {
-                println!("🔄 Pre-existing fulfilled transfer, allowing auction for demo purposes");
+                println!(" Pre-existing fulfilled transfer, allowing auction for demo purposes");
             } else if !self.demo_mode {
-                println!("❌ Transfer already fulfilled, skipping (demo mode disabled)");
+                println!(" Transfer already fulfilled, skipping (demo mode disabled)");
                 return;
             }
         }
 
         if dest_state.native_balance == U256::from(0) {
-            println!("❌ No native balance, returning");
+            println!(" No native balance, returning");
             return;
         }
 
         if dest_state.token_balance < amountOut {
-            println!("❌ Insufficient token balance: {} < {}, returning", dest_state.token_balance, amountOut);
+            println!(" Insufficient token balance: {} < {}, returning", dest_state.token_balance, amountOut);
             return;
         }
 
         // Validate slippage tolerance (solverFee is now slippage in basis points)
         // Slippage should be between 0 and 10000 (0% to 100%)
         if solverFee > U256::from(10000) {
-            println!("❌ Slippage tolerance too high: {} bps (max 10000), returning", solverFee);
+            println!(" Slippage tolerance too high: {} bps (max 10000), returning", solverFee);
             return;
         }
 
         if tokenOut != dest_state.token_addr {
-            println!("❌ Token mismatch: {} != {}, returning", tokenOut, dest_state.token_addr);
+            println!(" Token mismatch: {} != {}, returning", tokenOut, dest_state.token_addr);
             return;
         }
 
         // Check each validation condition with debug output
-        println!("🔍 Validating transfer conditions:");
-        println!("   executed: {}", executed);
-        println!("   already_fulfilled: {}", dest_state.already_fulfilled.contains(&transfer_request.request_id));
-        println!("   native_balance: {}", dest_state.native_balance);
-        println!("   token_balance: {} (needed: {})", dest_state.token_balance, amountOut);
-        println!("   slippage_tolerance_bps: {}", solverFee);
-        println!("   tokenOut matches: {}", tokenOut == dest_state.token_addr);
+        // println!("   Validating transfer conditions:");
+        // println!("   executed: {}", executed);
+        // println!("   already_fulfilled: {}", dest_state.already_fulfilled.contains(&transfer_request.request_id));
+        // println!("   native_balance: {}", dest_state.native_balance);
+        // println!("   token_balance: {} (needed: {})", dest_state.token_balance, amountOut);
+        // println!("   slippage_tolerance_bps: {}", solverFee);
+        // println!("   tokenOut matches: {}", tokenOut == dest_state.token_addr);
 
         // Slippage-based Dutch Auction Logic
         let (current_price, should_execute) = if let Some(auction) = dest_state.active_auctions.get_mut(&transfer_request.request_id) {
-            println!("🎯 Found slippage-based auction for {:?} on destination chain!", transfer_request.request_id);
+            // println!(" Found slippage-based auction for {:?} on destination chain!", transfer_request.request_id);
             
             // Try to fetch randomness from drand, fallback to deterministic if it fails
             let randomness = match crate::drand::DrandRandomness::new().get_normalized_random().await {
                 Ok(r) => {
-                    println!("🎲 Using drand randomness: {:.6}", r);
+                    println!(" Using drand randomness: {:.6}", r);
                     r
                 }
                 Err(e) => {
-                    println!("⚠️ Drand failed ({}), using deterministic pricing", e);
+                    println!(" Drand failed ({}), using deterministic pricing", e);
                     0.5 // Fallback to 50% randomness (1x normal decay)
                 }
             };
@@ -274,35 +282,35 @@ impl<'a, CSP: ChainStateProvider> Solver<'a, CSP> {
             let execution_threshold = start_fee.saturating_sub((price_range * percentage_down) / U256::from(100));
             let should_execute = current_price <= execution_threshold;
             
-            println!("💰 Solver '{}' Auction {:?} - Current price: {}, StartFee: {}, MinAllowedCost: {}, Threshold ({}x = {}% down): {}, Execute: {}", 
+            println!(" Solver '{}' Auction {:?} - Current price: {}, StartFee: {}, MinAllowedCost: {}, Threshold ({}x = {}% down): {}, Execute: {}", 
                 self.solver_name, transfer_request.request_id, current_price, start_fee, min_allowed_cost,
                 self.threshold_multiplier, percentage_down, execution_threshold, should_execute);
             
             if auction.is_expired() {
-                println!("⏰ Auction {:?} expired, executing at minAllowedCost", transfer_request.request_id);
+                println!("Auction {:?} expired, executing at minAllowedCost", transfer_request.request_id);
                 (auction.reserve_fee, true)
             } else {
                 (current_price, should_execute)
             }
         } else {
-            println!("❌ No auction found for {:?} on destination chain {}", transfer_request.request_id, normalise_chain_id(dstChainId));
+            println!(" No auction found for {:?} on destination chain {}", transfer_request.request_id, normalise_chain_id(dstChainId));
             // Fallback: treat solverFee as slippage and calculate minAllowedCost directly
             let slippage_bps = U256::from(10000);
             let min_allowed_cost = amountOut * (slippage_bps - solverFee) / slippage_bps;
-            println!("📈 Using fallback slippage calculation - Amount: {}, Slippage: {}, MinAllowedCost: {}", 
+            println!("Using fallback slippage calculation - Amount: {}, Slippage: {}, MinAllowedCost: {}", 
                 amountOut, solverFee, min_allowed_cost);
             (min_allowed_cost, true)
         };
 
         if !should_execute {
-            println!("❌ Solver '{}' not executing trade {:?} - price too high", self.solver_name, transfer_request.request_id);
+            println!(" Solver '{}' not executing trade {:?} - price too high", self.solver_name, transfer_request.request_id);
             return;
         }
 
         // 🚨 CRITICAL: Last-second check to prevent double execution
         // Double-check if trade was just executed by another solver
         if dest_state.already_fulfilled.contains(&transfer_request.request_id) {
-            println!("⚠️ Solver '{}' STOPPING execution - trade {:?} was just fulfilled by another solver!", self.solver_name, transfer_request.request_id);
+            println!(" Solver '{}' STOPPING execution - trade {:?} was just fulfilled by another solver!", self.solver_name, transfer_request.request_id);
             return;
         }
 

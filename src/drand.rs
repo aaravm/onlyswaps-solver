@@ -74,15 +74,15 @@ impl DrandRandomness {
         }
 
         let latest: LatestRound = resp.json().await?;
-        println!("round: {}", latest.round);
-        println!("signature (hex): {}", latest.signature);
+        // println!("round: {}", latest.round);
+        // println!("signature (hex): {}", latest.signature);
 
         // Parse signature hex as the randomness source (standard for drand)
         let hex_str = latest.signature.trim_start_matches("0x");
         let bytes = hex::decode(hex_str)?;
         let r = BigUint::from_bytes_be(&bytes);
-        println!("randomness from signature (int): {}", r);
-        println!("signature length: {} bytes ({} bits)", bytes.len(), bytes.len() * 8);
+        // println!("randomness from signature (int): {}", r);
+        // println!("signature length: {} bytes ({} bits)", bytes.len(), bytes.len() * 8);
 
         // Normalize to [0,1) with high precision using rug::Float
         // normalized = r / 2^(bits in signature)
@@ -101,7 +101,7 @@ impl DrandRandomness {
         denom <<= bits;
 
         let norm = f / denom;
-        println!("normalized (0..1) ~ {:.60}", norm); // 60 decimal places
+        // println!("normalized (0..1) ~ {:.60}", norm); // 60 decimal places
 
         Ok(norm)
     }

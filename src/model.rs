@@ -98,7 +98,7 @@ impl DutchAuction {
 
         self.current_fee = self.start_fee - (randomized_fee_drop * elapsed / total_duration);
         
-        println!("🎲 Time-based randomness: {:.6}, Scaled: {}, Fee drop: {}", 
+        println!(" Time-based randomness: {:.6}, Scaled: {}, Fee drop: {}", 
                 randomness, rnd_scaled_u64, randomized_fee_drop);
         
         self.current_fee
