@@ -1,3 +1,4 @@
+#
 ARG NODE_VERSION=22.3
 FROM node:${NODE_VERSION} AS sol_builder
 WORKDIR /app
