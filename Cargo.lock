@@ -181,7 +181,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "serde",
-] 
+]
 
 [[package]]
 name = "alloy-eip7702"
